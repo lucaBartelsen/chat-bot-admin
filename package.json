@@ -1,0 +1,42 @@
+{
+  "name": "chatsassistant-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/material": "^7.1.0",
+    "@mui/icons-material": "^7.1.0",
+    "@mui/x-data-grid": "^6.12.0",
+    "@mui/x-date-pickers": "^6.12.0",
+    "@tanstack/react-query": "^5.76.1",
+    "axios": "^1.5.0",
+    "date-fns": "^2.30.0",
+    "lodash": "^4.17.21",
+    "next": "^13.4.19",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.56.4",
+    "recharts": "^2.15.3",
+    "slate": "^0.94.1",
+    "slate-history": "^0.94.1",
+    "slate-react": "^0.94.1",
+    "zod": "^3.25.12"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.14.197",
+    "@types/node": "^20.5.9",
+    "@types/react": "^18.2.21",
+    "@types/react-dom": "^18.2.7",
+    "eslint": "^8.48.0",
+    "eslint-config-next": "^13.4.19",
+    "prettier": "^3.0.3",
+    "typescript": "^5.1.6"
+  }
+}
