@@ -1,4 +1,3 @@
-// lib/api.ts
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
 // Create an axios instance
@@ -12,14 +11,13 @@ const api = axios.create({
 // Request interceptor for adding auth token
 api.interceptors.request.use(
   (config) => {
-    // Get token from local storage if it exists
-    const token = localStorage.getItem('token');
-    
-    // If token exists, add it to the headers
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Only add token in browser environment
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
-    
     return config;
   },
   (error) => {
@@ -33,16 +31,12 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     // Handle 401 Unauthorized errors (token expired or invalid)
     if (error.response?.status === 401) {
-      // Clear localStorage
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
-      // Redirect to login page if we're in a browser environment
       if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/auth/login';
       }
     }
-    
     return Promise.reject(error);
   }
 );

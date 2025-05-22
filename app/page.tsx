@@ -4,7 +4,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import { isAuthenticated } from '@/lib/auth';
+import { isAuthenticated } from '../lib/auth';
 
 export default function HomePage() {
   const router = useRouter();

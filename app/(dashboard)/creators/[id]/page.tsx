@@ -1,4 +1,5 @@
-// app/(dashboard)/creators/[id]/page.tsx
+// app/(dashboard)/creators/[id]/page.tsx - Updated implementation
+
 'use client';
 
 import { useState, useEffect, SyntheticEvent } from 'react';
@@ -19,6 +20,8 @@ import {
   Divider,
   Switch,
   FormControlLabel,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
@@ -30,15 +33,11 @@ import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import Link from 'next/link';
 import { apiClient } from '../../../../lib/api';
 
-// Basic info tab content
+// Component imports
 import BasicInfoTab from '../../../../components/creators/BasicInfoTab';
-// Style config tab content
 import StyleConfigTab from '../../../../components/creators/StyleConfigTab';
-// Style examples tab content
 import StyleExamplesTab from '../../../../components/creators/StyleExamplesTab';
-// Response examples tab content
 import ResponseExamplesTab from '../../../../components/creators/ResponseExamplesTab';
-// Analytics tab content
 import AnalyticsTab from '../../../../components/creators/AnalyticsTab';
 
 // Creator interface
@@ -113,49 +112,7 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
   const [creatorStyle, setCreatorStyle] = useState<CreatorStyle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Example mock data - replace with actual API call
-  const mockCreator: Creator = {
-    id: 1,
-    name: 'John Smith',
-    description: 'Fashion blogger with a casual, friendly style.',
-    avatar_url: null,
-    is_active: true,
-    created_at: '2025-01-15T12:00:00Z',
-    updated_at: '2025-05-10T16:30:00Z',
-  };
-
-  const mockCreatorStyle: CreatorStyle = {
-    id: 1,
-    creator_id: 1,
-    approved_emojis: ['👋', '😊', '❤️', '👍', '🔥'],
-    case_style: 'sentence',
-    text_replacements: {
-      'website': 'blog',
-      'purchase': 'buy',
-      'discount': 'deal'
-    },
-    sentence_separators: ['.', '!', '?'],
-    punctuation_rules: {
-      'use_ellipsis': true,
-      'use_exclamations': true,
-      'max_consecutive_exclamations': 2
-    },
-    common_abbreviations: {
-      'btw': 'by the way',
-      'lol': 'laugh out loud',
-      'imo': 'in my opinion'
-    },
-    message_length_preferences: {
-      'min_length': 80,
-      'max_length': 280,
-      'optimal_length': 150
-    },
-    style_instructions: 'Keep the tone casual and friendly. Use short sentences and simple language. Occasionally add emojis to express emotions.',
-    tone_range: ['casual', 'friendly', 'enthusiastic', 'helpful'],
-    created_at: '2025-01-15T12:00:00Z',
-    updated_at: '2025-04-18T09:45:00Z'
-  };
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Fetch creator data from API
   useEffect(() => {
@@ -164,18 +121,24 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
       setError(null);
       
       try {
-        // In a real app, you would fetch from the API
-        const creatorData = await apiClient.get(`/creators/${params.id}`);
-        const styleData = await apiClient.get(`/creators/${params.id}/style`);
+        // Fetch creator details
+        const creatorData = await apiClient.get<Creator>(`/creators/${params.id}`);
         setCreator(creatorData);
-        setCreatorStyle(styleData);
         
-        // Using mock data for now
-        setCreator(mockCreator);
-        setCreatorStyle(mockCreatorStyle);
+        try {
+          // Fetch creator style (this might not exist yet for new creators)
+          const styleData = await apiClient.get<CreatorStyle>(`/creators/${params.id}/style`);
+          setCreatorStyle(styleData);
+        } catch (styleError: any) {
+          // If 404, it means the style doesn't exist yet - this is normal
+          if (styleError.response?.status !== 404) {
+            console.error('Error fetching creator style:', styleError);
+          }
+          setCreatorStyle(null);
+        }
       } catch (error: any) {
         console.error('Error fetching creator:', error);
-        setError(error.message || 'Failed to load creator data');
+        setError(error.response?.data?.detail || error.message || 'Failed to load creator data');
       } finally {
         setLoading(false);
       }
@@ -197,13 +160,15 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
     
     try {
       const newStatus = event.target.checked;
-      // In a real app, you would update via the API
+      // Call API to update creator status
       await apiClient.patch(`/creators/${creator.id}`, { is_active: newStatus });
       
       // Update local state
       setCreator({ ...creator, is_active: newStatus });
-    } catch (error) {
+      setSuccess(`Creator ${newStatus ? 'activated' : 'deactivated'} successfully`);
+    } catch (error: any) {
       console.error('Error updating creator status:', error);
+      setError(error.response?.data?.detail || error.message || 'Failed to update status');
     }
   };
 
@@ -241,6 +206,18 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
 
   return (
     <Box>
+      {/* Success message */}
+      <Snackbar
+        open={!!success}
+        autoHideDuration={6000}
+        onClose={() => setSuccess(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSuccess(null)} severity="success" sx={{ width: '100%' }}>
+          {success}
+        </Alert>
+      </Snackbar>
+      
       {/* Breadcrumbs navigation */}
       <Breadcrumbs sx={{ mb: 2 }}>
         <Link href="/dashboard" passHref legacyBehavior>
@@ -378,11 +355,17 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
 
       {/* Tab panels */}
       <TabPanel value={tabValue} index={0}>
-        <BasicInfoTab creator={creator} />
+        <BasicInfoTab creator={creator} setCreator={setCreator} setSuccess={setSuccess} setError={setError} />
       </TabPanel>
       
       <TabPanel value={tabValue} index={1}>
-        <StyleConfigTab creatorStyle={creatorStyle} creatorId={creator.id} />
+        <StyleConfigTab 
+          creatorStyle={creatorStyle} 
+          creatorId={creator.id} 
+          setCreatorStyle={setCreatorStyle}
+          setSuccess={setSuccess}
+          setError={setError}
+        />
       </TabPanel>
       
       <TabPanel value={tabValue} index={2}>

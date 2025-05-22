@@ -1,4 +1,5 @@
-// components/creators/StyleExamplesTab.tsx
+// components/creators/StyleExamplesTab.tsx - Updated implementation
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,7 +13,6 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
   Table,
   TableBody,
@@ -55,6 +55,15 @@ interface StyleExample {
   category: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// API response type for style examples
+interface StyleExamplesResponse {
+  items: StyleExample[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
 }
 
 // Style example form validation schema
@@ -102,55 +111,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [bulkUploadFile, setBulkUploadFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-
-  // Example mock data - replace with actual API call
-  const mockExamples: StyleExample[] = [
-    {
-      id: 1,
-      creator_id: creatorId,
-      fan_message: "Hey, how are you today?",
-      creator_response: "I'm doing great! Just finished a photoshoot for my new collection. How about you? 😊",
-      category: "Greeting",
-      created_at: "2025-03-15T12:00:00Z",
-      updated_at: "2025-03-15T12:00:00Z"
-    },
-    {
-      id: 2,
-      creator_id: creatorId,
-      fan_message: "I love your new jacket! Where did you get it?",
-      creator_response: "Thanks so much! ❤️ I actually designed it myself for my spring collection. You can find it on my website, link in bio!",
-      category: "Compliment",
-      created_at: "2025-03-16T14:20:00Z",
-      updated_at: "2025-03-16T14:20:00Z"
-    },
-    {
-      id: 3,
-      creator_id: creatorId,
-      fan_message: "Do you have any tips for styling a casual outfit?",
-      creator_response: "Absolutely! For casual looks, I always start with great basics - well-fitted jeans, a simple tee, and then add one statement piece like a cool jacket or accessories. The key is balance! What kind of occasion are you dressing for?",
-      category: "Question",
-      created_at: "2025-03-17T09:45:00Z",
-      updated_at: "2025-03-17T09:45:00Z"
-    },
-    {
-      id: 4,
-      creator_id: creatorId,
-      fan_message: "Can you do a tutorial on your makeup routine?",
-      creator_response: "I've been thinking about doing that! My everyday makeup is pretty simple tbh - tinted moisturizer, mascara, cream blush, and lip gloss. Would you prefer a quick IG story tutorial or a full YouTube video?",
-      category: "Request",
-      created_at: "2025-03-18T16:30:00Z",
-      updated_at: "2025-03-18T16:30:00Z"
-    },
-    {
-      id: 5,
-      creator_id: creatorId,
-      fan_message: "I'm visiting New York next month. Any recommendations for places to shop?",
-      creator_response: "Omg you're going to have the best time! 🗽 For shopping, definitely check out SoHo for cool boutiques, the Village for vintage finds, and of course 5th Ave for the classics. Let me know what you end up buying! I'm always looking for inspo.",
-      category: "Question",
-      created_at: "2025-03-19T11:15:00Z",
-      updated_at: "2025-03-19T11:15:00Z"
-    }
-  ];
+  const [totalExamples, setTotalExamples] = useState(0);
 
   // Form for adding/editing examples
   const { control, handleSubmit, reset, formState: { errors } } = useForm<StyleExampleFormValues>({
@@ -169,42 +130,27 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
       setError(null);
       
       try {
-        // In a real app, you would fetch from the API
-        const response = await apiClient.get(`/creators/${creatorId}/style-examples`);
-        setExamples(response);
+        const response = await apiClient.get<StyleExamplesResponse>(`/creators/${creatorId}/style-examples`, {
+          params: {
+            skip: page * rowsPerPage,
+            limit: rowsPerPage,
+            search: searchQuery || undefined,
+            category: categoryFilter !== 'all' ? categoryFilter : undefined,
+          }
+        });
         
-        // Using mock data for now
-        setExamples(mockExamples);
+        setExamples(response.items);
+        setTotalExamples(response.total);
       } catch (err: any) {
         console.error('Error fetching style examples:', err);
-        setError(err.message || 'Failed to load style examples');
+        setError(err.response?.data?.detail || err.message || 'Failed to load style examples');
       } finally {
         setLoading(false);
       }
     };
 
     fetchExamples();
-  }, [creatorId]);
-
-  // Filter examples based on search query and category
-  const filteredExamples = examples.filter((example) => {
-    const matchesSearch = 
-      searchQuery === '' || 
-      example.fan_message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      example.creator_response.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = 
-      categoryFilter === 'all' || 
-      example.category === categoryFilter;
-    
-    return matchesSearch && matchesCategory;
-  });
-
-  // Get examples for current page
-  const paginatedExamples = filteredExamples.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
+  }, [creatorId, page, rowsPerPage, searchQuery, categoryFilter]);
 
   // Handle page change
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -216,6 +162,14 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
+
+  // Handle search with debouncing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setPage(0); // Reset to first page when searching
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, categoryFilter]);
 
   // Open add example dialog
   const handleAddExample = () => {
@@ -248,46 +202,33 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
   // Handle form submission for add/edit
   const onSubmit = async (data: StyleExampleFormValues) => {
     setError(null);
-    setSuccess(null);
     
     try {
       if (editingExample) {
         // Update existing example
-        // In a real app, you would update via the API
         await apiClient.patch(`/creators/${creatorId}/style-examples/${editingExample.id}`, data);
-        
-        // Update local state
-        setExamples(examples.map(ex => 
-          ex.id === editingExample.id 
-            ? { ...ex, ...data } 
-            : ex
-        ));
-        
         setSuccess('Example updated successfully');
       } else {
         // Add new example
-        // In a real app, you would add via the API
-        const response = await apiClient.post(`/creators/${creatorId}/style-examples`, data);
-        
-        // Add to local state with a mock ID
-        const newExample: StyleExample = {
-          id: Math.max(0, ...examples.map(e => e.id)) + 1,
-          creator_id: creatorId,
-          fan_message: data.fan_message,
-          creator_response: data.creator_response,
-          category: data.category,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        
-        setExamples([...examples, newExample]);
+        await apiClient.post(`/creators/${creatorId}/style-examples`, data);
         setSuccess('Example added successfully');
       }
       
       setDialogOpen(false);
+      // Refresh the list
+      const response = await apiClient.get<StyleExamplesResponse>(`/creators/${creatorId}/style-examples`, {
+        params: {
+          skip: page * rowsPerPage,
+          limit: rowsPerPage,
+          search: searchQuery || undefined,
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+        }
+      });
+      setExamples(response.items);
+      setTotalExamples(response.total);
     } catch (err: any) {
       console.error('Error saving example:', err);
-      setError(err.message || 'Failed to save example');
+      setError(err.response?.data?.detail || err.message || 'Failed to save example');
     }
   };
 
@@ -296,17 +237,25 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
     if (!selectedExample) return;
     
     try {
-      // In a real app, you would delete via the API
       await apiClient.delete(`/creators/${creatorId}/style-examples/${selectedExample.id}`);
-      
-      // Update local state
-      setExamples(examples.filter(ex => ex.id !== selectedExample.id));
       setSuccess('Example deleted successfully');
       setDeleteDialogOpen(false);
       setSelectedExample(null);
+      
+      // Refresh the list
+      const response = await apiClient.get<StyleExamplesResponse>(`/creators/${creatorId}/style-examples`, {
+        params: {
+          skip: page * rowsPerPage,
+          limit: rowsPerPage,
+          search: searchQuery || undefined,
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+        }
+      });
+      setExamples(response.items);
+      setTotalExamples(response.total);
     } catch (err: any) {
       console.error('Error deleting example:', err);
-      setError(err.message || 'Failed to delete example');
+      setError(err.response?.data?.detail || err.message || 'Failed to delete example');
     }
   };
 
@@ -329,43 +278,48 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
     if (!bulkUploadFile) return;
     
     try {
-      // Simulate upload progress
-      for (let i = 0; i <= 100; i += 10) {
-        setUploadProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      
-      // In a real app, you would upload via the API
       const formData = new FormData();
       formData.append('file', bulkUploadFile);
+      
+      // Simulate progress during upload
+      setUploadProgress(0);
+      const interval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90));
+      }, 200);
+      
       await apiClient.post(`/creators/${creatorId}/bulk-style-examples`, formData, {
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        }
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
+      
+      clearInterval(interval);
+      setUploadProgress(100);
       
       setSuccess('Examples uploaded successfully');
       setBulkUploadOpen(false);
       
-      // In a real app, you would refetch the examples
-      const response = await apiClient.get(`/creators/${creatorId}/style-examples`);
-      setExamples(response);
+      // Refresh the examples list
+      const response = await apiClient.get<StyleExamplesResponse>(`/creators/${creatorId}/style-examples`, {
+        params: {
+          skip: page * rowsPerPage,
+          limit: rowsPerPage,
+          search: searchQuery || undefined,
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+        }
+      });
+      setExamples(response.items);
+      setTotalExamples(response.total);
     } catch (err: any) {
       console.error('Error uploading examples:', err);
-      setError(err.message || 'Failed to upload examples');
+      setError(err.response?.data?.detail || err.message || 'Failed to upload examples');
     }
   };
 
   // Handle export of examples
   const handleExport = async () => {
     try {
-      // In a real app, you would GET the CSV from the API
-      const response = await apiClient.get(`/creators/${creatorId}/style-examples/export`, {
-        responseType: 'blob',
-      });
-      
-      // Create CSV content manually for mock
+      // Create CSV content from current examples
       const headers = ['fan_message', 'creator_response', 'category'];
       const rows = examples.map(ex => [
         `"${ex.fan_message.replace(/"/g, '""')}"`,
@@ -387,6 +341,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       
       setSuccess('Examples exported successfully');
     } catch (err: any) {
@@ -498,7 +453,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
           </Box>
-        ) : filteredExamples.length === 0 ? (
+        ) : examples.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body1" color="text.secondary" gutterBottom>
               No examples found.
@@ -526,7 +481,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedExamples.map((example) => (
+                  {examples.map((example) => (
                     <TableRow key={example.id}>
                       <TableCell 
                         sx={{ 
@@ -606,7 +561,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
             <TablePagination
               rowsPerPageOptions={[5, 10, 25, 50]}
               component="div"
-              count={filteredExamples.length}
+              count={totalExamples}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
@@ -713,9 +668,9 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
       >
         <DialogTitle>Delete Example</DialogTitle>
         <DialogContent>
-          <DialogContentText>
+          <Typography>
             Are you sure you want to delete this example? This action cannot be undone.
-          </DialogContentText>
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>
@@ -738,9 +693,9 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
       >
         <DialogTitle>Bulk Import Examples</DialogTitle>
         <DialogContent>
-          <DialogContentText paragraph>
+          <Typography paragraph>
             Upload a CSV file with fan messages and creator responses. The file should have the following columns:
-          </DialogContentText>
+          </Typography>
           <Typography variant="body2" component="pre" sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1, fontFamily: 'monospace' }}>
             fan_message,creator_response,category
           </Typography>

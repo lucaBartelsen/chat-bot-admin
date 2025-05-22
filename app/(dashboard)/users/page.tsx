@@ -413,6 +413,7 @@ export default function UsersPage() {
     const maskedPart = '•'.repeat(10);
     return `${prefix}...${maskedPart}...${suffix}`;
   };
+
   return (
     <Box>
       {/* Success message */}
@@ -723,7 +724,7 @@ export default function UsersPage() {
         </form>
       </Dialog>
       
-      {/* View User Dialog */}
+      {/* View User Dialog - FIXED: Updated Grid usage to Material-UI v7 syntax */}
       <Dialog
         open={viewUserOpen}
         onClose={() => setViewUserOpen(false)}
@@ -735,7 +736,7 @@ export default function UsersPage() {
             <DialogTitle>User Details</DialogTitle>
             <DialogContent>
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
                     <Typography variant="h6" gutterBottom>
                       Account Information
@@ -789,7 +790,7 @@ export default function UsersPage() {
                   </Paper>
                 </Grid>
                 
-                <Grid item xs={12} md={6}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
                     <Typography variant="h6" gutterBottom>
                       Preferences
@@ -842,7 +843,7 @@ export default function UsersPage() {
                   </Paper>
                 </Grid>
                 
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                     <Button
                       variant="outlined"

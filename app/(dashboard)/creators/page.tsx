@@ -263,9 +263,10 @@ export default function CreatorsPage() {
         </Box>
       ) : (
         <>
+          {/* FIXED: Updated Grid usage to Material-UI v7 syntax */}
           <Grid container spacing={3}>
             {filteredCreators.map((creator) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={creator.id}>
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={creator.id}>
                 <Card 
                   sx={{ 
                     height: '100%', 

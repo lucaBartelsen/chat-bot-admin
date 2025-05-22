@@ -1,4 +1,5 @@
-// lib/auth.ts
+// lib/auth.ts - Updated implementation
+
 import { apiClient } from './api';
 
 // Types
@@ -24,8 +25,6 @@ export interface UserPreference {
   default_model: string;
   suggestion_count: number;
   selected_creators: number[] | null;
-  created_at: string;
-  updated_at: string;
 }
 
 // Store user data in localStorage
@@ -40,7 +39,12 @@ export const getUser = (): User | null => {
   if (typeof window !== 'undefined') {
     const userJson = localStorage.getItem('user');
     if (userJson) {
-      return JSON.parse(userJson);
+      try {
+        return JSON.parse(userJson);
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+        return null;
+      }
     }
   }
   return null;
@@ -113,7 +117,9 @@ const authService = {
   // Get current user
   getCurrentUser: async (): Promise<User> => {
     try {
-      return await apiClient.get<User>('/auth/me');
+      const user = await apiClient.get<User>('/auth/me');
+      storeUser(user); // Update stored user data
+      return user;
     } catch (error) {
       console.error('Get current user error:', error);
       throw error;

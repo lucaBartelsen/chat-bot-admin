@@ -86,9 +86,9 @@ export default function DashboardPage() {
         Welcome to the FanFix ChatAssist admin dashboard. View stats and manage your creators.
       </Typography>
       
-      {/* Stats Cards */}
+      {/* FIXED: Stats Cards - Updated Grid usage to Material-UI v7 syntax */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card 
             sx={{ 
               height: '100%',
@@ -116,7 +116,7 @@ export default function DashboardPage() {
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card 
             sx={{ 
               height: '100%',
@@ -147,7 +147,7 @@ export default function DashboardPage() {
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card 
             sx={{ 
               height: '100%',
@@ -178,7 +178,7 @@ export default function DashboardPage() {
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <Card 
             sx={{ 
               height: '100%',
@@ -231,10 +231,10 @@ export default function DashboardPage() {
         </Box>
       </Paper>
       
-      {/* Bottom section */}
+      {/* FIXED: Bottom section - Updated Grid usage to Material-UI v7 syntax */}
       <Grid container spacing={3}>
         {/* Recent Activity */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
             <Typography variant="h6" gutterBottom fontWeight="bold">
               Recent Activity
@@ -263,7 +263,7 @@ export default function DashboardPage() {
         </Grid>
         
         {/* Top Creators */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
             <Typography variant="h6" gutterBottom fontWeight="bold">
               Top Creators

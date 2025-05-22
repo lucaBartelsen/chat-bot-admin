@@ -242,8 +242,8 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
         </Box>
       ) : (
         <Grid container spacing={3}>
-          {/* Stats Cards */}
-          <Grid item xs={12} md={4}>
+          {/* FIXED: Stats Cards - Updated Grid usage to Material-UI v7 syntax */}
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card sx={{ height: '100%', borderRadius: 2 }}>
               <CardContent>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -256,7 +256,7 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
             </Card>
           </Grid>
           
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card sx={{ height: '100%', borderRadius: 2 }}>
               <CardContent>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -269,7 +269,7 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
             </Card>
           </Grid>
           
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Card sx={{ height: '100%', borderRadius: 2 }}>
               <CardContent>
                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -283,7 +283,7 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
           </Grid>
           
           {/* API Usage Chart */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Paper sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
                 API Usage Over Time
@@ -315,8 +315,8 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
             </Paper>
           </Grid>
           
-          {/* Category Distribution */}
-          <Grid item xs={12} md={6}>
+          {/* Category Distribution and Top Fan Messages */}
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Category Distribution
@@ -348,7 +348,7 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
           </Grid>
           
           {/* Top Fan Messages */}
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 3, borderRadius: 2, height: '100%' }}>
               <Typography variant="h6" gutterBottom>
                 Top Fan Messages
@@ -384,7 +384,7 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
           </Grid>
           
           {/* Monthly Trends */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Paper sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Monthly Trends
@@ -409,7 +409,7 @@ export default function AnalyticsTab({ creatorId, creatorName }: AnalyticsTabPro
           </Grid>
           
           {/* Usage Recommendations */}
-          <Grid item xs={12}>
+          <Grid size={12}>
             <Paper sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Optimization Recommendations

@@ -147,9 +147,10 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
           </Box>
           
           <form onSubmit={handleSubmit}>
+            {/* FIXED: Updated Grid usage to Material-UI v7 syntax */}
             <Grid container spacing={3}>
               {/* Avatar upload */}
-              <Grid item xs={12} sm={4} md={3} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Grid size={{ xs: 12, sm: 4, md: 3 }} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <Avatar
                   src={avatarPreview || undefined}
                   sx={{
@@ -180,7 +181,7 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
               </Grid>
               
               {/* Form fields */}
-              <Grid item xs={12} sm={8} md={9}>
+              <Grid size={{ xs: 12, sm: 8, md: 9 }}>
                 <TextField
                   fullWidth
                   label="Creator Name"
@@ -225,7 +226,7 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
       ) : (
         <Grid container spacing={3}>
           {/* Creator Info Card */}
-          <Grid item xs={12} md={8}>
+          <Grid size={{ xs: 12, md: 8 }}>
             <Paper sx={{ p: 3, height: '100%', borderRadius: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h6" fontWeight="bold">Basic Information</Typography>
@@ -240,7 +241,7 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
               
               <Grid container spacing={2}>
                 {/* Basic info */}
-                <Grid item xs={12} sm={4} md={3} sx={{ display: 'flex', justifyContent: 'center' }}>
+                <Grid size={{ xs: 12, sm: 4, md: 3 }} sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Avatar
                     src={creator.avatar_url || undefined}
                     sx={{
@@ -254,7 +255,7 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
                   </Avatar>
                 </Grid>
                 
-                <Grid item xs={12} sm={8} md={9}>
+                <Grid size={{ xs: 12, sm: 8, md: 9 }}>
                   <Typography variant="h5" gutterBottom>
                     {creator.name}
                   </Typography>
@@ -272,7 +273,7 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
           </Grid>
           
           {/* Dates & Stats Card */}
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, md: 4 }}>
             <Paper sx={{ p: 3, height: '100%', borderRadius: 2 }}>
               <Typography variant="h6" fontWeight="bold" gutterBottom>
                 Details
