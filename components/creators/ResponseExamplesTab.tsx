@@ -432,8 +432,10 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
       formData.append('file', bulkUploadFile);
       await apiClient.post(`/creators/${creatorId}/bulk-response-examples`, formData, {
         onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
+          if (progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(percentCompleted);
+          }
         }
       });
       

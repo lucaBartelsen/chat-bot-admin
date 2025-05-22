@@ -37,7 +37,7 @@ import {
   Snackbar,
   Grid,
 } from '@mui/material';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import AddIcon from '@mui/icons-material/Add';
@@ -76,10 +76,10 @@ interface UserPreference {
 // Create user form validation schema
 const createUserSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
-  is_admin: z.boolean().default(false),
-  openai_api_key: z.string().nullable().optional(),
-  default_model: z.string().default('gpt-4'),
-  suggestion_count: z.number().int().min(1).max(10).default(3),
+  is_admin: z.boolean(), // Remove .default() to make it required
+  openai_api_key: z.string().nullable(), // Remove .default() 
+  default_model: z.string(), // Remove .default()
+  suggestion_count: z.number().int().min(1).max(10), // Remove .default()
 });
 
 // Form type from schema
@@ -188,7 +188,7 @@ export default function UsersPage() {
       openai_api_key: null,
       default_model: 'gpt-4',
       suggestion_count: 3,
-    }
+    } as CreateUserFormValues, // Add type assertion
   });
 
   // Fetch users from API
@@ -796,7 +796,7 @@ export default function UsersPage() {
                       Preferences
                     </Typography>
                     
-                    {preferences[selectedUser.id] && (
+                    {selectedUser && preferences[selectedUser.id] && (
                       <>
                         <Typography variant="subtitle2" color="text.secondary">
                           OpenAI API Key
@@ -814,22 +814,22 @@ export default function UsersPage() {
                           Default Model
                         </Typography>
                         <Typography variant="body1" paragraph>
-                          {preferences[selectedUser.id].default_model}
+                          {preferences[selectedUser.id]?.default_model}
                         </Typography>
                         
                         <Typography variant="subtitle2" color="text.secondary">
                           Suggestion Count
                         </Typography>
                         <Typography variant="body1" paragraph>
-                          {preferences[selectedUser.id].suggestion_count}
+                          {preferences[selectedUser.id]?.suggestion_count}
                         </Typography>
                         
                         <Typography variant="subtitle2" color="text.secondary">
                           Selected Creators
                         </Typography>
                         <Typography variant="body1">
-                          {preferences[selectedUser.id].selected_creators 
-                            ? `${preferences[selectedUser.id].selected_creators.length} creators selected`
+                          {preferences[selectedUser.id]?.selected_creators 
+                            ? `${preferences[selectedUser.id]?.selected_creators?.length || 0} creators selected`
                             : "No creators selected"}
                         </Typography>
                       </>

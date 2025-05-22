@@ -1,4 +1,4 @@
-// lib/theme.ts
+// lib/theme.ts - Fix the textTransform type issue
 import { createTheme, responsiveFontSizes } from '@mui/material/styles';
 import { PaletteMode } from '@mui/material';
 
@@ -75,7 +75,7 @@ const getDesignTokens = (mode: PaletteMode) => ({
     },
     button: {
       fontWeight: 600,
-      textTransform: 'none',
+      textTransform: 'none' as const, // Fix: explicitly type as const
     },
   },
   shape: {

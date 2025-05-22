@@ -37,12 +37,14 @@ interface Creator {
 
 interface BasicInfoTabProps {
   creator: Creator;
+  setCreator: React.Dispatch<React.SetStateAction<Creator | null>>;
+  setSuccess: React.Dispatch<React.SetStateAction<string | null>>;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
+export default function BasicInfoTab({ creator, setCreator, setSuccess, setError }: BasicInfoTabProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: creator.name,
     description: creator.description || '',
@@ -97,6 +99,17 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
       // For now, just simulate a successful update
       await new Promise(resolve => setTimeout(resolve, 800));
       
+      // Update the creator state
+      const updatedCreator = {
+        ...creator,
+        name: formData.name,
+        description: formData.description,
+        avatar_url: avatarPreview,
+        updated_at: new Date().toISOString(),
+      };
+      
+      setCreator(updatedCreator);
+      setSuccess('Creator updated successfully');
       setIsEditing(false);
     } catch (err: any) {
       console.error('Error updating creator:', err);
@@ -116,13 +129,7 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
   };
 
   return (
-    <Box>
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-      
+    <Box>      
       {isEditing ? (
         <Paper sx={{ p: 3, borderRadius: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -147,7 +154,6 @@ export default function BasicInfoTab({ creator }: BasicInfoTabProps) {
           </Box>
           
           <form onSubmit={handleSubmit}>
-            {/* FIXED: Updated Grid usage to Material-UI v7 syntax */}
             <Grid container spacing={3}>
               {/* Avatar upload */}
               <Grid size={{ xs: 12, sm: 4, md: 3 }} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

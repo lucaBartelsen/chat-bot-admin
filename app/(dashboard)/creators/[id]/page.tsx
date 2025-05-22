@@ -1,4 +1,4 @@
-// app/(dashboard)/creators/[id]/page.tsx - Updated implementation
+// app/(dashboard)/creators/[id]/page.tsx - Updated with proper prop handling
 
 'use client';
 
@@ -17,7 +17,6 @@ import {
   Breadcrumbs,
   Link as MuiLink,
   IconButton,
-  Divider,
   Switch,
   FormControlLabel,
   Snackbar,
@@ -218,6 +217,13 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
         </Alert>
       </Snackbar>
       
+      {/* Error message */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+      
       {/* Breadcrumbs navigation */}
       <Breadcrumbs sx={{ mb: 2 }}>
         <Link href="/dashboard" passHref legacyBehavior>
@@ -355,7 +361,12 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
 
       {/* Tab panels */}
       <TabPanel value={tabValue} index={0}>
-        <BasicInfoTab creator={creator} setCreator={setCreator} setSuccess={setSuccess} setError={setError} />
+        <BasicInfoTab 
+          creator={creator} 
+          setCreator={setCreator} 
+          setSuccess={setSuccess} 
+          setError={setError} 
+        />
       </TabPanel>
       
       <TabPanel value={tabValue} index={1}>

@@ -24,7 +24,6 @@ import {
   TableHead,
   TableRow,
   CircularProgress,
-  Alert,
   Switch,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -55,6 +54,9 @@ interface CreatorStyle {
 interface StyleConfigTabProps {
   creatorStyle: CreatorStyle | null;
   creatorId: number;
+  setCreatorStyle: React.Dispatch<React.SetStateAction<CreatorStyle | null>>;
+  setSuccess: React.Dispatch<React.SetStateAction<string | null>>;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 // Common tone options
@@ -89,10 +91,8 @@ const styleConfigSchema = z.object({
 // Form type from schema
 type StyleConfigFormValues = z.infer<typeof styleConfigSchema>;
 
-export default function StyleConfigTab({ creatorStyle, creatorId }: StyleConfigTabProps) {
+export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyle, setSuccess, setError }: StyleConfigTabProps) {
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [newEmojiInput, setNewEmojiInput] = useState('');
   const [newSeparatorInput, setNewSeparatorInput] = useState('');
   const [newReplacementKey, setNewReplacementKey] = useState('');
@@ -137,7 +137,6 @@ export default function StyleConfigTab({ creatorStyle, creatorId }: StyleConfigT
   const onSubmit = async (data: StyleConfigFormValues) => {
     setSaving(true);
     setError(null);
-    setSuccess(false);
     
     try {
       // In a real app, you would update via the API
@@ -150,9 +149,17 @@ export default function StyleConfigTab({ creatorStyle, creatorId }: StyleConfigT
       // For now, just simulate a successful update
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      setSuccess(true);
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(false), 3000);
+      // Update the creator style state
+      const updatedStyle: CreatorStyle = {
+        id: creatorStyle?.id || Date.now(),
+        creator_id: creatorId,
+        ...data,
+        created_at: creatorStyle?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      
+      setCreatorStyle(updatedStyle);
+      setSuccess('Style configuration saved successfully!');
     } catch (err: any) {
       console.error('Error updating style config:', err);
       setError(err.message || 'Failed to update style configuration');
@@ -239,20 +246,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId }: StyleConfigT
 
   return (
     <Box>
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Style configuration saved successfully!
-        </Alert>
-      )}
-      
       <form onSubmit={handleSubmit(onSubmit)}>
-        {/* FIXED: Updated Grid usage to Material-UI v7 syntax */}
         <Grid container spacing={3}>
           {/* Text styling options */}
           <Grid size={{ xs: 12, md: 6 }}>
