@@ -1,3 +1,4 @@
+// lib/api.ts - Enhanced version with better error handling and logging
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
 // Create an axios instance
@@ -6,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout
 });
 
 // Function to get token - this will be called fresh each time
@@ -80,31 +82,154 @@ api.interceptors.response.use(
         }
       }
     }
+    
+    // Handle 404 Not Found errors
+    if (error.response?.status === 404) {
+      console.warn('🔍 404 Not Found:', error.config?.url);
+    }
+    
+    // Handle 500 Internal Server Error
+    if (error.response?.status === 500) {
+      console.error('🔥 500 Internal Server Error:', error.config?.url);
+    }
+    
     return Promise.reject(error);
   }
 );
 
-// Reusable API methods
+// Enhanced error interface
+interface ApiError extends Error {
+  status?: number;
+  data?: any;
+}
+
+// Interface for API error response
+interface ApiErrorResponse {
+  detail?: string;
+  message?: string;
+  [key: string]: any;
+}
+
+// Type guard to check if response data has error properties
+const isApiErrorResponse = (data: unknown): data is ApiErrorResponse => {
+  return typeof data === 'object' && data !== null;
+};
+
+// Helper function to create a better error message
+const createApiError = (error: AxiosError): ApiError => {
+  let errorMessage = 'An unknown error occurred';
+  
+  // Try to extract error message from response data
+  if (error.response?.data && isApiErrorResponse(error.response.data)) {
+    errorMessage = error.response.data.detail || 
+                   error.response.data.message || 
+                   errorMessage;
+  } else if (error.message) {
+    errorMessage = error.message;
+  }
+  
+  const apiError = new Error(errorMessage) as ApiError;
+  apiError.status = error.response?.status;
+  apiError.data = error.response?.data;
+  
+  return apiError;
+};
+
+// Reusable API methods with enhanced error handling
 export const apiClient = {
   get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-    return api.get(url, config).then((response: AxiosResponse<T>) => response.data);
+    return api.get(url, config)
+      .then((response: AxiosResponse<T>) => response.data)
+      .catch((error: AxiosError) => {
+        throw createApiError(error);
+      });
   },
   
   post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-    return api.post(url, data, config).then((response: AxiosResponse<T>) => response.data);
+    return api.post(url, data, config)
+      .then((response: AxiosResponse<T>) => response.data)
+      .catch((error: AxiosError) => {
+        throw createApiError(error);
+      });
   },
   
   put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-    return api.put(url, data, config).then((response: AxiosResponse<T>) => response.data);
+    return api.put(url, data, config)
+      .then((response: AxiosResponse<T>) => response.data)
+      .catch((error: AxiosError) => {
+        throw createApiError(error);
+      });
   },
   
   patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-    return api.patch(url, data, config).then((response: AxiosResponse<T>) => response.data);
+    return api.patch(url, data, config)
+      .then((response: AxiosResponse<T>) => response.data)
+      .catch((error: AxiosError) => {
+        throw createApiError(error);
+      });
   },
   
   delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-    return api.delete(url, config).then((response: AxiosResponse<T>) => response.data);
+    return api.delete(url, config)
+      .then((response: AxiosResponse<T>) => response.data)
+      .catch((error: AxiosError) => {
+        throw createApiError(error);
+      });
   },
+};
+
+// Specific API functions for common operations
+export const creatorsApi = {
+  // Get all creators with pagination and filtering
+  getCreators: (params?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    is_active?: boolean;
+  }) => apiClient.get<{
+    items: any[];
+    total: number;
+    page: number;
+    size: number;
+    pages: number;
+  }>('/creators', { params }),
+  
+  // Get a single creator by ID
+  getCreator: (id: number) => apiClient.get(`/creators/${id}`),
+  
+  // Create a new creator
+  createCreator: (data: any) => apiClient.post('/creators', data),
+  
+  // Update a creator
+  updateCreator: (id: number, data: any) => apiClient.patch(`/creators/${id}`, data),
+  
+  // Delete a creator
+  deleteCreator: (id: number) => apiClient.delete(`/creators/${id}`),
+  
+  // Get creator style
+  getCreatorStyle: (id: number) => apiClient.get(`/creators/${id}/style`),
+  
+  // Update creator style
+  updateCreatorStyle: (id: number, data: any) => apiClient.patch(`/creators/${id}/style`, data),
+  
+  // Create creator style
+  createCreatorStyle: (id: number, data: any) => apiClient.post(`/creators/${id}/style`, data),
+  
+  // Get style examples for a creator
+  getStyleExamples: (id: number, params?: {
+    skip?: number;
+    limit?: number;
+    category?: string;
+    search?: string;
+  }) => apiClient.get(`/creators/${id}/style-examples`, { params }),
+  
+  // Get response examples for a creator
+  getResponseExamples: (id: number, params?: {
+    skip?: number;
+    limit?: number;
+    category?: string;
+    search?: string;
+  }) => apiClient.get(`/creators/${id}/response-examples`, { params }),
 };
 
 // Export the axios instance for direct use if needed

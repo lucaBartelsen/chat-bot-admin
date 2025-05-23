@@ -1,4 +1,4 @@
-// components/creators/StyleConfigTab.tsx
+// components/creators/StyleConfigTab.tsx - Fixed type issues
 'use client';
 
 import { useState } from 'react';
@@ -34,7 +34,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiClient } from '../../lib/api';
 
-// Creator style interface
+// Creator style interface - updated to match backend model
 interface CreatorStyle {
   id: number;
   creator_id: number;
@@ -68,9 +68,9 @@ const toneOptions = [
   'thoughtful', 'inspirational', 'sarcastic', 'respectful'
 ];
 
-// Form validation schema
+// Form validation schema - updated to match CreatorStyle interface
 const styleConfigSchema = z.object({
-  case_style: z.enum(['lowercase', 'uppercase', 'sentence', 'title', 'custom']),
+  case_style: z.enum(['lowercase', 'uppercase', 'sentence', 'title', 'custom']).nullable(),
   approved_emojis: z.array(z.string()).nullable(),
   sentence_separators: z.array(z.string()).nullable(),
   text_replacements: z.record(z.string(), z.string()).nullable(),
@@ -140,21 +140,34 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
     setError(null);
     
     try {
-      // In a real app, you would update via the API
+      // Prepare the data to send to the API
+      const apiData = {
+        ...data,
+        creator_id: creatorId, // Ensure creator_id is included
+      };
+
+      let response;
       if (creatorStyle) {
-        await apiClient.patch(`/creators/${creatorId}/style`, data);
+        // Update existing style
+        response = await apiClient.patch(`/creators/${creatorId}/style`, apiData);
       } else {
-        await apiClient.post(`/creators/${creatorId}/style`, data);
+        // Create new style
+        response = await apiClient.post(`/creators/${creatorId}/style`, apiData);
       }
       
-      // For now, just simulate a successful update
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Update the creator style state
+      // Create updated style object with proper structure
       const updatedStyle: CreatorStyle = {
-        id: creatorStyle?.id || Date.now(),
+        id: creatorStyle?.id || response.id || Date.now(),
         creator_id: creatorId,
-        ...data,
+        approved_emojis: data.approved_emojis,
+        case_style: data.case_style,
+        text_replacements: data.text_replacements,
+        sentence_separators: data.sentence_separators,
+        punctuation_rules: data.punctuation_rules,
+        common_abbreviations: data.common_abbreviations,
+        message_length_preferences: data.message_length_preferences,
+        style_instructions: data.style_instructions,
+        tone_range: data.tone_range,
         created_at: creatorStyle?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -163,7 +176,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
       setSuccess('Style configuration saved successfully!');
     } catch (err: any) {
       console.error('Error updating style config:', err);
-      setError(err.message || 'Failed to update style configuration');
+      setError(err.response?.data?.detail || err.message || 'Failed to update style configuration');
     } finally {
       setSaving(false);
     }
@@ -263,7 +276,11 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                   render={({ field }) => (
                     <FormControl component="fieldset">
                       <FormLabel component="legend">Case Style</FormLabel>
-                      <RadioGroup row {...field}>
+                      <RadioGroup 
+                        row 
+                        value={field.value || 'sentence'}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      >
                         <FormControlLabel value="lowercase" control={<Radio />} label="lowercase" />
                         <FormControlLabel value="uppercase" control={<Radio />} label="UPPERCASE" />
                         <FormControlLabel value="sentence" control={<Radio />} label="Sentence case" />
@@ -365,6 +382,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                       InputProps={{
                         inputProps: { min: 0 }
                       }}
+                      value={field.value || 0}
                       onChange={(e) => field.onChange(Number(e.target.value))}
                     />
                   )}
@@ -383,6 +401,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                       InputProps={{
                         inputProps: { min: 0 }
                       }}
+                      value={field.value || 500}
                       onChange={(e) => field.onChange(Number(e.target.value))}
                     />
                   )}
@@ -401,6 +420,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                       InputProps={{
                         inputProps: { min: 0 }
                       }}
+                      value={field.value || 250}
                       onChange={(e) => field.onChange(Number(e.target.value))}
                     />
                   )}
@@ -419,7 +439,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                     <FormControlLabel
                       control={
                         <Switch
-                          checked={field.value}
+                          checked={field.value || false}
                           onChange={(e) => field.onChange(e.target.checked)}
                         />
                       }
@@ -435,7 +455,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                     <FormControlLabel
                       control={
                         <Switch
-                          checked={field.value}
+                          checked={field.value || false}
                           onChange={(e) => field.onChange(e.target.checked)}
                         />
                       }
@@ -457,6 +477,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                       InputProps={{
                         inputProps: { min: 0, max: 5 }
                       }}
+                      value={field.value || 2}
                       onChange={(e) => field.onChange(Number(e.target.value))}
                     />
                   )}
@@ -674,6 +695,8 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                     fullWidth
                     placeholder="Enter detailed style instructions here..."
                     helperText="Describe the creator's tone, phrasing preferences, sentence structure, and any other specific style guidelines."
+                    value={field.value || ''}
+                    onChange={(e) => field.onChange(e.target.value)}
                   />
                 )}
               />

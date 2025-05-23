@@ -1,5 +1,4 @@
-// components/creators/ResponseExamplesTab.tsx - Fixed React key prop issue
-
+// components/creators/ResponseExamplesTab.tsx - Updated to use real API data
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -55,7 +54,7 @@ import { apiClient } from '../../lib/api';
 import { format } from 'date-fns';
 import React from 'react';
 
-// Response example interfaces
+// Response example interfaces from your backend
 interface CreatorResponse {
   id: number;
   example_id: number;
@@ -71,6 +70,15 @@ interface ResponseExample {
   created_at: string;
   updated_at: string;
   responses: CreatorResponse[];
+}
+
+// API response type for paginated response examples
+interface ResponseExamplesResponse {
+  items: ResponseExample[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
 }
 
 // Response example form validation schema
@@ -122,88 +130,7 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [bulkUploadFile, setBulkUploadFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-
-  // Example mock data - replace with actual API call
-  const mockExamples: ResponseExample[] = [
-    {
-      id: 1,
-      creator_id: creatorId,
-      fan_message: "Hey, I'm visiting your city next month! Any recommendations?",
-      category: "Question",
-      created_at: "2025-03-15T12:00:00Z",
-      updated_at: "2025-03-15T12:00:00Z",
-      responses: [
-        {
-          id: 1,
-          example_id: 1,
-          response_text: "Omg, that's awesome! I've got tons of recommendations! What are you into - food, art, nightlife? My absolute fave spots are La Luna for dinner (get the truffle pasta!), The Highline for walking, and MoMA PS1 for art. How long are you staying? 😊",
-          ranking: 5
-        },
-        {
-          id: 2,
-          example_id: 1,
-          response_text: "Nice! You should definitely check out Central Park, Times Square, and the Empire State Building while you're here. Let me know if you need any specific recommendations!",
-          ranking: 3
-        },
-        {
-          id: 3,
-          example_id: 1,
-          response_text: "I'd be happy to recommend some places! What kind of things are you interested in doing during your visit?",
-          ranking: 2
-        }
-      ]
-    },
-    {
-      id: 2,
-      creator_id: creatorId,
-      fan_message: "Just bought your new book and I'm loving it so far!",
-      category: "Compliment",
-      created_at: "2025-03-16T14:20:00Z",
-      updated_at: "2025-03-16T14:20:00Z",
-      responses: [
-        {
-          id: 4,
-          example_id: 2,
-          response_text: "OMG thank you so much!! 🥰 I'm seriously so happy you're enjoying it! That means the world to me. Which part are you at? I'd love to hear your thoughts when you finish it! xoxo",
-          ranking: 5
-        },
-        {
-          id: 5,
-          example_id: 2,
-          response_text: "Thank you for your support! I hope you enjoy the rest of the book.",
-          ranking: 1
-        }
-      ]
-    },
-    {
-      id: 3,
-      creator_id: creatorId,
-      fan_message: "What's your skincare routine? Your skin always looks amazing!",
-      category: "Question",
-      created_at: "2025-03-17T09:45:00Z",
-      updated_at: "2025-03-17T09:45:00Z",
-      responses: [
-        {
-          id: 6,
-          example_id: 3,
-          response_text: "Aww thank you! ✨ My skincare routine is actually pretty simple! I always double cleanse at night, use vitamin C in the morning, and NEVER skip sunscreen (seriously, it's the secret weapon lol). Oh and I drink tons of water! Been loving the new @GlowSerum recently too - have you tried it? 💦",
-          ranking: 5
-        },
-        {
-          id: 7,
-          example_id: 3,
-          response_text: "Thanks! I use cleanser, toner, serum, moisturizer, and SPF. Drinking water helps too!",
-          ranking: 3
-        },
-        {
-          id: 8,
-          example_id: 3,
-          response_text: "I appreciate that! I actually don't do anything special, just genetics I guess.",
-          ranking: 1
-        }
-      ]
-    }
-  ];
+  const [totalExamples, setTotalExamples] = useState(0);
 
   // Form for adding/editing examples
   const { control, handleSubmit, reset, formState: { errors } } = useForm<ResponseExampleFormValues>({
@@ -222,30 +149,72 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
   });
 
   // Fetch examples from API
-  useEffect(() => {
-    const fetchExamples = async () => {
-      setLoading(true);
-      setError(null);
+  const fetchExamples = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log('🔄 Fetching response examples from API...');
       
-      try {
-        // In a real app, you would fetch from the API
-        const response = await apiClient.get(`/creators/${creatorId}/response-examples`);
-        setExamples(response);
-        
-        // Using mock data for now
-        setExamples(mockExamples);
-      } catch (err: any) {
-        console.error('Error fetching response examples:', err);
-        setError(err.message || 'Failed to load response examples');
-      } finally {
-        setLoading(false);
+      // Build query parameters
+      const params: any = {
+        skip: page * rowsPerPage,
+        limit: rowsPerPage,
+      };
+      
+      // Add search if provided
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
       }
-    };
+      
+      // Add category filter if not 'all'
+      if (categoryFilter !== 'all') {
+        params.category = categoryFilter;
+      }
+      
+      console.log('📤 API request params:', params);
+      
+      // Fetch response examples from your API
+      const response = await apiClient.get<ResponseExample[]>(
+        `/creators/${creatorId}/response-examples`, 
+        { params }
+      );
+      
+      console.log('✅ Response examples fetched successfully:', response);
+      
+      // Handle direct array response (your actual API format)
+      if (Array.isArray(response)) {
+        setExamples(response);
+        setTotalExamples(response.length);
+      } else {
+        // Fallback for paginated response format
+        setExamples((response as any).items || []);
+        setTotalExamples((response as any).total || 0);
+      }
+      
+    } catch (err: any) {
+      console.error('❌ Error fetching response examples:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to load response examples');
+      // Set empty arrays on error
+      setExamples([]);
+      setTotalExamples(0);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Initial fetch on component mount
+  useEffect(() => {
     fetchExamples();
-  }, [creatorId]);
+  }, [creatorId]); // Only re-fetch when creatorId changes
 
-  // Filter examples based on search query and category
+  // Handle search with debouncing - no need to re-fetch since we do client-side filtering
+  useEffect(() => {
+    // Reset to first page when search or filter changes
+    setPage(0);
+  }, [searchQuery, categoryFilter]);
+
+  // Filter examples locally for immediate UI feedback and handle search/category filtering
   const filteredExamples = examples.filter((example) => {
     const matchesSearch = 
       searchQuery === '' || 
@@ -261,7 +230,7 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
     return matchesSearch && matchesCategory;
   });
 
-  // Get examples for current page
+  // Get examples for current page (client-side pagination since API returns all results)
   const paginatedExamples = filteredExamples.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage
@@ -328,59 +297,25 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
     setSuccess(null);
     
     try {
+      console.log('💾 Saving response example:', data);
+      
       if (editingExample) {
         // Update existing example
-        // In a real app, you would update via the API
         await apiClient.patch(`/creators/${creatorId}/response-examples/${editingExample.id}`, data);
-        
-        // Update local state
-        setExamples(examples.map(ex => 
-          ex.id === editingExample.id 
-            ? {
-                ...ex,
-                fan_message: data.fan_message,
-                category: data.category,
-                responses: data.responses.map((resp, idx) => ({
-                  id: ex.responses[idx]?.id || Math.random() * 1000, // mock id
-                  example_id: ex.id,
-                  response_text: resp.response_text,
-                  ranking: resp.ranking,
-                })),
-              }
-            : ex
-        ));
-        
         setSuccess('Example updated successfully');
       } else {
         // Add new example
-        // In a real app, you would add via the API
-        const response = await apiClient.post(`/creators/${creatorId}/response-examples`, data);
-        
-        // Add to local state with mock IDs
-        const newExampleId = Math.max(0, ...examples.map(e => e.id)) + 1;
-        const newExample: ResponseExample = {
-          id: newExampleId,
-          creator_id: creatorId,
-          fan_message: data.fan_message,
-          category: data.category,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          responses: data.responses.map((resp, idx) => ({
-            id: newExampleId * 100 + idx,
-            example_id: newExampleId,
-            response_text: resp.response_text,
-            ranking: resp.ranking,
-          })),
-        };
-        
-        setExamples([...examples, newExample]);
+        await apiClient.post(`/creators/${creatorId}/response-examples`, data);
         setSuccess('Example added successfully');
       }
       
       setDialogOpen(false);
+      // Refresh the list
+      await fetchExamples();
+      
     } catch (err: any) {
-      console.error('Error saving example:', err);
-      setError(err.message || 'Failed to save example');
+      console.error('❌ Error saving example:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to save example');
     }
   };
 
@@ -389,17 +324,19 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
     if (!selectedExample) return;
     
     try {
-      // In a real app, you would delete via the API
-      await apiClient.delete(`/creators/${creatorId}/response-examples/${selectedExample.id}`);
+      console.log('🗑️ Deleting response example:', selectedExample.id);
       
-      // Update local state
-      setExamples(examples.filter(ex => ex.id !== selectedExample.id));
+      await apiClient.delete(`/creators/${creatorId}/response-examples/${selectedExample.id}`);
       setSuccess('Example deleted successfully');
       setDeleteDialogOpen(false);
       setSelectedExample(null);
+      
+      // Refresh the list
+      await fetchExamples();
+      
     } catch (err: any) {
-      console.error('Error deleting example:', err);
-      setError(err.message || 'Failed to delete example');
+      console.error('❌ Error deleting example:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to delete example');
     }
   };
 
@@ -422,16 +359,18 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
     if (!bulkUploadFile) return;
     
     try {
-      // Simulate upload progress
-      for (let i = 0; i <= 100; i += 10) {
-        setUploadProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
+      console.log('📤 Uploading bulk response examples...');
       
-      // In a real app, you would upload via the API
       const formData = new FormData();
       formData.append('file', bulkUploadFile);
+      
+      // Start progress
+      setUploadProgress(10);
+      
       await apiClient.post(`/creators/${creatorId}/bulk-response-examples`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -440,27 +379,26 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
         }
       });
       
+      setUploadProgress(100);
       setSuccess('Examples uploaded successfully');
       setBulkUploadOpen(false);
       
-      // In a real app, you would refetch the examples
-      const response = await apiClient.get(`/creators/${creatorId}/response-examples`);
-      setExamples(response);
+      // Refresh the examples list
+      await fetchExamples();
+      
     } catch (err: any) {
-      console.error('Error uploading examples:', err);
-      setError(err.message || 'Failed to upload examples');
+      console.error('❌ Error uploading examples:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to upload examples');
+      setUploadProgress(0);
     }
   };
 
   // Handle export of examples
   const handleExport = async () => {
     try {
-      // In a real app, you would GET the CSV from the API
-      const response = await apiClient.get(`/creators/${creatorId}/response-examples/export`, {
-        responseType: 'blob',
-      });
+      console.log('📥 Exporting response examples...');
       
-      // Create CSV content manually for mock
+      // Create CSV content from current examples
       const headers = ['fan_message', 'category', 'response_text', 'ranking'];
       const rows: string[][] = [];
       
@@ -489,10 +427,11 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       
       setSuccess('Examples exported successfully');
     } catch (err: any) {
-      console.error('Error exporting examples:', err);
+      console.error('❌ Error exporting examples:', err);
       setError(err.message || 'Failed to export examples');
     }
   };
@@ -531,6 +470,11 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
           <Typography variant="h6" fontWeight="bold">
             Response Examples
+            {totalExamples > 0 && (
+              <Typography component="span" sx={{ ml: 1, fontWeight: 400, color: 'text.secondary' }}>
+                ({totalExamples} total)
+              </Typography>
+            )}
           </Typography>
           
           <Box sx={{ display: 'flex', gap: 2 }}>
@@ -538,6 +482,7 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
               variant="outlined"
               startIcon={<FileDownloadIcon />}
               onClick={handleExport}
+              disabled={examples.length === 0}
             >
               Export
             </Button>
@@ -603,16 +548,18 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
         ) : filteredExamples.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body1" color="text.secondary" gutterBottom>
-              No examples found.
+              {searchQuery || categoryFilter !== 'all' ? 'No examples match your search criteria.' : 'No response examples found.'}
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAddExample}
-              sx={{ mt: 2 }}
-            >
-              Add Your First Example
-            </Button>
+            {!searchQuery && categoryFilter === 'all' && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleAddExample}
+                sx={{ mt: 2 }}
+              >
+                Add Your First Response Example
+              </Button>
+            )}
           </Box>
         ) : (
           <>
@@ -630,7 +577,6 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
                 </TableHead>
                 <TableBody>
                   {paginatedExamples.map((example) => {
-                    // FIXED: Use React.Fragment with proper key
                     return (
                       <React.Fragment key={`example-${example.id}`}>
                         <TableRow 
@@ -950,7 +896,8 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
         <DialogTitle>Delete Example</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete this example? This action cannot be undone.
+            Are you sure you want to delete this response example? This action cannot be undone,
+            and all associated response options will be permanently removed.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1006,6 +953,9 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
           {uploadProgress > 0 && (
             <Box sx={{ width: '100%', mt: 2 }}>
               <LinearProgress variant="determinate" value={uploadProgress} />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Uploading... {uploadProgress}%
+              </Typography>
             </Box>
           )}
         </DialogContent>
