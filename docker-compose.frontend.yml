@@ -1,0 +1,29 @@
+# docker-compose.frontend.yml - Updated to work with existing backend
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://chatsassistant.com/api
+    container_name: fanfix-frontend
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://chatsassistant.com/api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Connect to your existing backend network
+    networks:
+      - chat-bot-api_default  # This should match your backend's network name
+
+# Use external network (your existing backend network)
+networks:
+  chat-bot-api_default:
+    external: true
