@@ -1,10 +1,12 @@
+.PHONY: help setup build deploy start stop restart logs clean dev test lint format check status update-nginx backup restore
+
 # Project configuration
-PROJECT_NAME = chatsassistant-frontend
+PROJECT_NAME = fanfix-chatassist-frontend
 DOCKER_IMAGE = $(PROJECT_NAME)
 DOCKER_TAG = latest
-CONTAINER_NAME = PROJECT_NAME = chatsassistant-frontend
-NGINX_CONTAINER = chat-bot-api_nginx_1
-BACKEND_NETWORK = chat-bot-api_default
+CONTAINER_NAME = fanfix-frontend
+NGINX_CONTAINER = fanfix-api-nginx-1
+BACKEND_NETWORK = fanfix-api_default
 DOMAIN = chatsassistant.com
 API_URL = https://$(DOMAIN)/api
 
@@ -75,8 +77,8 @@ build: ## Build Docker image
 		echo "$(RED)Error: .env file not found. Run 'make setup' first.$(NC)"; \
 		exit 1; \
 	fi
-	@source .env && docker build \
-		--build-arg NEXT_PUBLIC_API_URL=$${NEXT_PUBLIC_API_URL:-$(API_URL)} \
+	@set -a && . ./.env && set +a && docker build \
+		--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-$(API_URL)} \
 		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
 		.
 	@echo "$(GREEN)✅ Image built successfully!$(NC)"
@@ -94,12 +96,12 @@ deploy: build ## Deploy frontend to production
 	@docker stop $(CONTAINER_NAME) 2>/dev/null || true
 	@docker rm $(CONTAINER_NAME) 2>/dev/null || true
 	@echo "$(BLUE)Starting new container...$(NC)"
-	@source .env && docker run -d \
+	@set -a && . ./.env && set +a && docker run -d \
 		--name $(CONTAINER_NAME) \
 		--network $(BACKEND_NETWORK) \
 		--restart unless-stopped \
 		-e NODE_ENV=production \
-		-e NEXT_PUBLIC_API_URL=$${NEXT_PUBLIC_API_URL:-$(API_URL)} \
+		-e NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-$(API_URL)} \
 		$(DOCKER_IMAGE):$(DOCKER_TAG)
 	@echo "$(BLUE)Waiting for container to be ready...$(NC)"
 	@sleep 10
