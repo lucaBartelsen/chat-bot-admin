@@ -19,7 +19,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import ChatIcon from '@mui/icons-material/Chat';
-import authService from '../../../lib/auth';
+import { useAuth } from '../../../contexts/AuthContext';
 
 // Form validation schema
 const loginSchema = z.object({
@@ -31,8 +31,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { login, loading, error } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
 
   const { control, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
@@ -44,17 +43,12 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
-    setLoading(true);
-    setError(null);
-    
     try {
-      await authService.login(data.email, data.password);
-      router.push('/dashboard');
-    } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.response?.data?.detail || 'Invalid email or password. Please try again.');
-    } finally {
-      setLoading(false);
+      await login(data.email, data.password);
+      // AuthContext will handle the redirect to dashboard
+    } catch (err) {
+      // Error is handled by AuthContext
+      console.error('Login failed:', err);
     }
   };
 

@@ -33,6 +33,7 @@ import Avatar from '@mui/material/Avatar';
 import Tooltip from '@mui/material/Tooltip';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { useTheme } from '../theme/ThemeProvider';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Navigation items for the sidebar
 const navItems = [
@@ -53,11 +54,16 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const { mode, toggleColorMode } = useTheme();
+  const { user, logout } = useAuth();
   const muiTheme = useMuiTheme();
   const [open, setOpen] = useState(true);
 
   const toggleDrawer = () => {
     setOpen(!open);
+  };
+
+  const handleLogout = () => {
+    logout();
   };
 
   return (
@@ -112,7 +118,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </IconButton>
             
             {/* User profile */}
-            <Tooltip title="Profile">
+            <Tooltip title={`Logged in as ${user?.email}`}>
               <IconButton sx={{ ml: 1 }}>
                 <Avatar
                   sx={{
@@ -121,14 +127,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     height: 32,
                   }}
                 >
-                  <PersonIcon />
+                  {user?.email?.charAt(0).toUpperCase() || <PersonIcon />}
                 </Avatar>
               </IconButton>
             </Tooltip>
             
             {/* Logout */}
             <Tooltip title="Logout">
-              <IconButton color="inherit" sx={{ ml: 1 }}>
+              <IconButton color="inherit" sx={{ ml: 1 }} onClick={handleLogout}>
                 <LogoutIcon />
               </IconButton>
             </Tooltip>

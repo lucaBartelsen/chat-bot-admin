@@ -1,4 +1,5 @@
-// components/creators/ResponseExamplesTab.tsx
+// components/creators/ResponseExamplesTab.tsx - Fixed React key prop issue
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,7 +13,6 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
   Table,
   TableBody,
@@ -53,6 +53,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import StarIcon from '@mui/icons-material/Star';
 import { apiClient } from '../../lib/api';
 import { format } from 'date-fns';
+import React from 'react';
 
 // Response example interfaces
 interface CreatorResponse {
@@ -628,143 +629,145 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedExamples.map((example) => (
-                    <>
-                      <TableRow 
-                        key={example.id}
-                        sx={{
-                          '&:hover': { bgcolor: 'background.default' },
-                          bgcolor: expandedRows.has(example.id) ? 'background.default' : 'inherit',
-                        }}
-                      >
-                        <TableCell padding="checkbox">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleToggleRow(example.id)}
-                            aria-label={expandedRows.has(example.id) ? "Collapse" : "Expand"}
-                          >
-                            {expandedRows.has(example.id) ? 
-                              <ExpandLessIcon /> : 
-                              <ExpandMoreIcon />
-                            }
-                          </IconButton>
-                        </TableCell>
-                        <TableCell 
-                          sx={{ 
-                            maxWidth: 250, 
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            cursor: 'pointer',
+                  {paginatedExamples.map((example) => {
+                    // FIXED: Use React.Fragment with proper key
+                    return (
+                      <React.Fragment key={`example-${example.id}`}>
+                        <TableRow 
+                          sx={{
+                            '&:hover': { bgcolor: 'background.default' },
+                            bgcolor: expandedRows.has(example.id) ? 'background.default' : 'inherit',
                           }}
-                          onClick={() => handleToggleRow(example.id)}
                         >
-                          <Tooltip title={example.fan_message} enterDelay={500}>
-                            <Typography variant="body2">
-                              {example.fan_message}
-                            </Typography>
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell onClick={() => handleToggleRow(example.id)} sx={{ cursor: 'pointer' }}>
-                          {example.category ? (
-                            <Chip 
-                              label={example.category} 
-                              size="small" 
-                              sx={{ 
-                                bgcolor: 'primary.light', 
-                                color: 'primary.dark',
-                                fontWeight: 500,
-                              }} 
-                            />
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              —
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="center" onClick={() => handleToggleRow(example.id)} sx={{ cursor: 'pointer' }}>
-                          <Typography variant="body2">
-                            {example.responses.length}
-                          </Typography>
-                        </TableCell>
-                        <TableCell onClick={() => handleToggleRow(example.id)} sx={{ cursor: 'pointer' }}>
-                          <Typography variant="body2">
-                            {formatDate(example.created_at)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="Edit">
+                          <TableCell padding="checkbox">
                             <IconButton
                               size="small"
-                              onClick={() => handleEditExample(example)}
+                              onClick={() => handleToggleRow(example.id)}
+                              aria-label={expandedRows.has(example.id) ? "Collapse" : "Expand"}
                             >
-                              <EditIcon fontSize="small" />
+                              {expandedRows.has(example.id) ? 
+                                <ExpandLessIcon /> : 
+                                <ExpandMoreIcon />
+                              }
                             </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDeleteClick(example)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell 
-                          sx={{ py: 0 }} 
-                          colSpan={6}
-                        >
-                          <Collapse 
-                            in={expandedRows.has(example.id)} 
-                            timeout="auto" 
-                            unmountOnExit
+                          </TableCell>
+                          <TableCell 
+                            sx={{ 
+                              maxWidth: 250, 
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => handleToggleRow(example.id)}
                           >
-                            <Box sx={{ py: 2, px: 3 }}>
-                              <Typography variant="subtitle2" gutterBottom component="div">
-                                Responses
+                            <Tooltip title={example.fan_message} enterDelay={500}>
+                              <Typography variant="body2">
+                                {example.fan_message}
                               </Typography>
-                              {example.responses.sort((a, b) => (b.ranking || 0) - (a.ranking || 0)).map((response) => (
-                                <Card 
-                                  key={response.id} 
-                                  variant="outlined" 
-                                  sx={{ 
-                                    mb: 2, 
-                                    borderColor: (response.ranking || 0) >= 4 ? 'primary.main' : 'divider'
-                                  }}
-                                >
-                                  <CardContent>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                                      <Rating 
-                                        value={response.ranking || 0} 
-                                        readOnly 
-                                        precision={1}
-                                        emptyIcon={<StarIcon style={{ opacity: 0.3 }} fontSize="inherit" />}
-                                      />
-                                      <Chip 
-                                        label={response.ranking === 5 ? "Best" : response.ranking === 4 ? "Great" : response.ranking === 3 ? "Good" : response.ranking === 2 ? "Fair" : "Poor"} 
-                                        size="small"
-                                        color={response.ranking === 5 ? "primary" : response.ranking === 4 ? "primary" : response.ranking === 3 ? "default" : response.ranking === 2 ? "default" : "error"}
-                                        sx={{ 
-                                          fontWeight: 500,
-                                          opacity: response.ranking === null ? 0 : 1
-                                        }}
-                                      />
-                                    </Box>
-                                    <Typography variant="body2">
-                                      {response.response_text}
-                                    </Typography>
-                                  </CardContent>
-                                </Card>
-                              ))}
-                            </Box>
-                          </Collapse>
-                        </TableCell>
-                      </TableRow>
-                    </>
-                  ))}
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell onClick={() => handleToggleRow(example.id)} sx={{ cursor: 'pointer' }}>
+                            {example.category ? (
+                              <Chip 
+                                label={example.category} 
+                                size="small" 
+                                sx={{ 
+                                  bgcolor: 'primary.light', 
+                                  color: 'primary.dark',
+                                  fontWeight: 500,
+                                }} 
+                              />
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                —
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="center" onClick={() => handleToggleRow(example.id)} sx={{ cursor: 'pointer' }}>
+                            <Typography variant="body2">
+                              {example.responses.length}
+                            </Typography>
+                          </TableCell>
+                          <TableCell onClick={() => handleToggleRow(example.id)} sx={{ cursor: 'pointer' }}>
+                            <Typography variant="body2">
+                              {formatDate(example.created_at)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Tooltip title="Edit">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleEditExample(example)}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteClick(example)}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow key={`collapse-${example.id}`}>
+                          <TableCell 
+                            sx={{ py: 0 }} 
+                            colSpan={6}
+                          >
+                            <Collapse 
+                              in={expandedRows.has(example.id)} 
+                              timeout="auto" 
+                              unmountOnExit
+                            >
+                              <Box sx={{ py: 2, px: 3 }}>
+                                <Typography variant="subtitle2" gutterBottom component="div">
+                                  Responses
+                                </Typography>
+                                {example.responses.sort((a, b) => (b.ranking || 0) - (a.ranking || 0)).map((response) => (
+                                  <Card 
+                                    key={response.id} 
+                                    variant="outlined" 
+                                    sx={{ 
+                                      mb: 2, 
+                                      borderColor: (response.ranking || 0) >= 4 ? 'primary.main' : 'divider'
+                                    }}
+                                  >
+                                    <CardContent>
+                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                                        <Rating 
+                                          value={response.ranking || 0} 
+                                          readOnly 
+                                          precision={1}
+                                          emptyIcon={<StarIcon style={{ opacity: 0.3 }} fontSize="inherit" />}
+                                        />
+                                        <Chip 
+                                          label={response.ranking === 5 ? "Best" : response.ranking === 4 ? "Great" : response.ranking === 3 ? "Good" : response.ranking === 2 ? "Fair" : "Poor"} 
+                                          size="small"
+                                          color={response.ranking === 5 ? "primary" : response.ranking === 4 ? "primary" : response.ranking === 3 ? "default" : response.ranking === 2 ? "default" : "error"}
+                                          sx={{ 
+                                            fontWeight: 500,
+                                            opacity: response.ranking === null ? 0 : 1
+                                          }}
+                                        />
+                                      </Box>
+                                      <Typography variant="body2">
+                                        {response.response_text}
+                                      </Typography>
+                                    </CardContent>
+                                  </Card>
+                                ))}
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -845,9 +848,8 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
             
             {errors.responses && typeof errors.responses.message === 'string' && (
               <Alert severity="error" sx={{ mb: 2 }}>
-                {errors.responses.message
-                }
-            </Alert>
+                {errors.responses.message}
+              </Alert>
             )}
             
             {fields.map((field, index) => (
@@ -947,9 +949,9 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
       >
         <DialogTitle>Delete Example</DialogTitle>
         <DialogContent>
-          <DialogContentText>
+          <Typography>
             Are you sure you want to delete this example? This action cannot be undone.
-          </DialogContentText>
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>
@@ -972,15 +974,15 @@ export default function ResponseExamplesTab({ creatorId }: ResponseExamplesTabPr
       >
         <DialogTitle>Bulk Import Response Examples</DialogTitle>
         <DialogContent>
-          <DialogContentText paragraph>
+          <Typography paragraph>
             Upload a CSV file with fan messages and response options. The file should have the following columns:
-          </DialogContentText>
+          </Typography>
           <Typography variant="body2" component="pre" sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1, fontFamily: 'monospace' }}>
             fan_message,category,response_text,ranking
           </Typography>
-          <DialogContentText paragraph sx={{ mt: 2 }}>
+          <Typography paragraph sx={{ mt: 2 }}>
             You can include multiple responses for the same fan message by repeating the fan_message and category in multiple rows.
-          </DialogContentText>
+          </Typography>
           
           <Button
             component="label"

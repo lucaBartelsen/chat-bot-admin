@@ -1,4 +1,4 @@
-// components/creators/StyleExamplesTab.tsx - Updated implementation
+// components/creators/StyleExamplesTab.tsx - Fixed implementation
 
 'use client';
 
@@ -96,6 +96,7 @@ const categories = [
 ];
 
 export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
+  // FIXED: Initialize as empty array to prevent undefined errors
   const [examples, setExamples] = useState<StyleExample[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,11 +140,15 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
           }
         });
         
-        setExamples(response.items);
-        setTotalExamples(response.total);
+        // FIXED: Ensure we always set arrays, handle undefined responses
+        setExamples(response?.items || []);
+        setTotalExamples(response?.total || 0);
       } catch (err: any) {
         console.error('Error fetching style examples:', err);
         setError(err.response?.data?.detail || err.message || 'Failed to load style examples');
+        // FIXED: Set empty arrays on error to prevent undefined issues
+        setExamples([]);
+        setTotalExamples(0);
       } finally {
         setLoading(false);
       }
@@ -151,6 +156,12 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
 
     fetchExamples();
   }, [creatorId, page, rowsPerPage, searchQuery, categoryFilter]);
+
+  // FIXED: Safe filtering with null coalescing
+  const filteredExamples = (examples || []).filter((example) =>
+    example.fan_message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (example.creator_response && example.creator_response.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   // Handle page change
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -224,8 +235,9 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
           category: categoryFilter !== 'all' ? categoryFilter : undefined,
         }
       });
-      setExamples(response.items);
-      setTotalExamples(response.total);
+      // FIXED: Safe assignment with fallbacks
+      setExamples(response?.items || []);
+      setTotalExamples(response?.total || 0);
     } catch (err: any) {
       console.error('Error saving example:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to save example');
@@ -251,8 +263,9 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
           category: categoryFilter !== 'all' ? categoryFilter : undefined,
         }
       });
-      setExamples(response.items);
-      setTotalExamples(response.total);
+      // FIXED: Safe assignment with fallbacks
+      setExamples(response?.items || []);
+      setTotalExamples(response?.total || 0);
     } catch (err: any) {
       console.error('Error deleting example:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to delete example');
@@ -308,8 +321,9 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
           category: categoryFilter !== 'all' ? categoryFilter : undefined,
         }
       });
-      setExamples(response.items);
-      setTotalExamples(response.total);
+      // FIXED: Safe assignment with fallbacks
+      setExamples(response?.items || []);
+      setTotalExamples(response?.total || 0);
     } catch (err: any) {
       console.error('Error uploading examples:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to upload examples');
@@ -321,7 +335,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
     try {
       // Create CSV content from current examples
       const headers = ['fan_message', 'creator_response', 'category'];
-      const rows = examples.map(ex => [
+      const rows = (examples || []).map(ex => [
         `"${ex.fan_message.replace(/"/g, '""')}"`,
         `"${ex.creator_response.replace(/"/g, '""')}"`,
         `"${ex.category || ''}"`
@@ -453,7 +467,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
           </Box>
-        ) : examples.length === 0 ? (
+        ) : (!examples || examples.length === 0) ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body1" color="text.secondary" gutterBottom>
               No examples found.
@@ -481,7 +495,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {examples.map((example) => (
+                  {(examples || []).map((example) => (
                     <TableRow key={example.id}>
                       <TableCell 
                         sx={{ 
@@ -561,7 +575,7 @@ export default function StyleExamplesTab({ creatorId }: StyleExamplesTabProps) {
             <TablePagination
               rowsPerPageOptions={[5, 10, 25, 50]}
               component="div"
-              count={totalExamples}
+              count={totalExamples || 0}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}

@@ -1,8 +1,8 @@
-// app/(dashboard)/creators/[id]/page.tsx - Updated with proper prop handling
+// app/(dashboard)/creators/[id]/page.tsx - Fixed with React.use()
 
 'use client';
 
-import { useState, useEffect, SyntheticEvent } from 'react';
+import { useState, useEffect, SyntheticEvent, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Box, 
@@ -104,7 +104,9 @@ function a11yProps(index: number) {
 }
 
 // Creator detail page component
-export default function CreatorDetailPage({ params }: { params: { id: string } }) {
+export default function CreatorDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // FIXED: Unwrap params using React.use()
+  const resolvedParams = use(params);
   const router = useRouter();
   const [tabValue, setTabValue] = useState(0);
   const [creator, setCreator] = useState<Creator | null>(null);
@@ -120,13 +122,13 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
       setError(null);
       
       try {
-        // Fetch creator details
-        const creatorData = await apiClient.get<Creator>(`/creators/${params.id}`);
+        // FIXED: Use resolvedParams.id instead of params.id
+        const creatorData = await apiClient.get<Creator>(`/creators/${resolvedParams.id}`);
         setCreator(creatorData);
         
         try {
           // Fetch creator style (this might not exist yet for new creators)
-          const styleData = await apiClient.get<CreatorStyle>(`/creators/${params.id}/style`);
+          const styleData = await apiClient.get<CreatorStyle>(`/creators/${resolvedParams.id}/style`);
           setCreatorStyle(styleData);
         } catch (styleError: any) {
           // If 404, it means the style doesn't exist yet - this is normal
@@ -143,10 +145,11 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
       }
     };
 
-    if (params.id) {
+    // FIXED: Use resolvedParams.id instead of params.id
+    if (resolvedParams.id) {
       fetchCreatorData();
     }
-  }, [params.id]);
+  }, [resolvedParams.id]); // FIXED: Updated dependency array
 
   // Handle tab change
   const handleTabChange = (event: SyntheticEvent, newValue: number) => {
@@ -173,7 +176,8 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
 
   // Handle edit click
   const handleEditClick = () => {
-    router.push(`/creators/${params.id}/edit`);
+    // FIXED: Use resolvedParams.id instead of params.id
+    router.push(`/creators/${resolvedParams.id}/edit`);
   };
 
   // Return loading state or error
@@ -226,12 +230,12 @@ export default function CreatorDetailPage({ params }: { params: { id: string } }
       
       {/* Breadcrumbs navigation */}
       <Breadcrumbs sx={{ mb: 2 }}>
-        <Link href="/dashboard" passHref legacyBehavior>
-          <MuiLink color="inherit" underline="hover">Dashboard</MuiLink>
-        </Link>
-        <Link href="/creators" passHref legacyBehavior>
-          <MuiLink color="inherit" underline="hover">Creators</MuiLink>
-        </Link>
+        <MuiLink component={Link} href="/dashboard" color="inherit" underline="hover">
+          Dashboard
+        </MuiLink>
+        <MuiLink component={Link} href="/creators" color="inherit" underline="hover">
+          Creators
+        </MuiLink>
         <Typography color="text.primary">{creator.name}</Typography>
       </Breadcrumbs>
 

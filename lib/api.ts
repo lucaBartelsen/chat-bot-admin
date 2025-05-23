@@ -8,33 +8,76 @@ const api = axios.create({
   },
 });
 
+// Function to get token - this will be called fresh each time
+const getStoredToken = (): string | null => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    console.log('🔑 Getting fresh token from localStorage:', token ? 'FOUND' : 'NOT FOUND');
+    if (token) {
+      console.log('🔑 Token preview:', token.substring(0, 50) + '...');
+    }
+    return token;
+  }
+  return null;
+};
+
 // Request interceptor for adding auth token
 api.interceptors.request.use(
   (config) => {
-    // Only add token in browser environment
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    console.log('🚀 Making API request to:', config.method?.toUpperCase(), config.url);
+    
+    // Get fresh token each time a request is made
+    const token = getStoredToken();
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+      console.log('✅ Authorization header added:', `Bearer ${token.substring(0, 50)}...`);
+    } else {
+      console.log('❌ No token found - request will be sent without Authorization header');
+      // Remove Authorization header if no token
+      delete config.headers.Authorization;
     }
+    
+    console.log('📤 Request headers:', {
+      'Content-Type': config.headers['Content-Type'],
+      'Authorization': config.headers.Authorization ? `Bearer ${token?.substring(0, 20)}...` : 'NOT SET'
+    });
+    
     return config;
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor for handling errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ API Response:', response.status, response.config?.method?.toUpperCase(), response.config?.url);
+    return response;
+  },
   (error: AxiosError) => {
+    console.error('❌ API Error:', {
+      status: error.response?.status,
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      message: error.message,
+      data: error.response?.data
+    });
+    
     // Handle 401 Unauthorized errors (token expired or invalid)
     if (error.response?.status === 401) {
+      console.log('🔒 401 Unauthorized detected - clearing stored auth data');
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/auth/login';
+        
+        // Only redirect if we're not already on login page
+        if (!window.location.pathname.includes('/auth/login')) {
+          console.log('🔄 Redirecting to login page');
+          window.location.href = '/auth/login';
+        }
       }
     }
     return Promise.reject(error);
@@ -64,4 +107,5 @@ export const apiClient = {
   },
 };
 
+// Export the axios instance for direct use if needed
 export default api;

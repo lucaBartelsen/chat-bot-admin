@@ -32,6 +32,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { apiClient } from '../../lib/api';
 
 // Creator style interface
 interface CreatorStyle {
@@ -141,9 +142,9 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
     try {
       // In a real app, you would update via the API
       if (creatorStyle) {
-        // await apiClient.patch(`/creators/${creatorId}/style`, data);
+        await apiClient.patch(`/creators/${creatorId}/style`, data);
       } else {
-        // await apiClient.post(`/creators/${creatorId}/style`, data);
+        await apiClient.post(`/creators/${creatorId}/style`, data);
       }
       
       // For now, just simulate a successful update
