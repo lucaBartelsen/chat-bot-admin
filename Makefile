@@ -2,7 +2,7 @@
 PROJECT_NAME = chatsassistant-frontend
 DOCKER_IMAGE = $(PROJECT_NAME)
 DOCKER_TAG = latest
-CONTAINER_NAME = PROJECT_NAME = chatsassistant-frontend
+CONTAINER_NAME = $(PROJECT_NAME)  # FIXED: This was duplicating PROJECT_NAME assignment
 NGINX_CONTAINER = chat-bot-api_nginx_1
 BACKEND_NETWORK = chat-bot-api_default
 DOMAIN = chatsassistant.com
@@ -39,7 +39,7 @@ setup: ## Setup development environment
 	@echo "$(GREEN)Setting up development environment...$(NC)"
 	@if [ ! -f .env ]; then \
 		echo "$(YELLOW)Creating .env file from template...$(NC)"; \
-		cp .env.example .env; \
+		echo "NEXT_PUBLIC_API_URL=https://$(DOMAIN)/api" > .env; \
 		echo "$(YELLOW)Please edit .env file with your configuration$(NC)"; \
 	fi
 	@if [ ! -f package-lock.json ]; then \
@@ -75,8 +75,8 @@ build: ## Build Docker image
 		echo "$(RED)Error: .env file not found. Run 'make setup' first.$(NC)"; \
 		exit 1; \
 	fi
-	@set -a && . ./.env && set +a && docker build \
-		--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-$(API_URL)} \
+	@export $$(cat .env | xargs) && docker build \
+		--build-arg NEXT_PUBLIC_API_URL=$${NEXT_PUBLIC_API_URL:-$(API_URL)} \
 		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
 		.
 	@echo "$(GREEN)✅ Image built successfully!$(NC)"
@@ -94,12 +94,12 @@ deploy: build ## Deploy frontend to production
 	@docker stop $(CONTAINER_NAME) 2>/dev/null || true
 	@docker rm $(CONTAINER_NAME) 2>/dev/null || true
 	@echo "$(BLUE)Starting new container...$(NC)"
-	@set -a && . ./.env && set +a && docker run -d \
+	@export $$(cat .env | xargs) && docker run -d \
 		--name $(CONTAINER_NAME) \
 		--network $(BACKEND_NETWORK) \
 		--restart unless-stopped \
 		-e NODE_ENV=production \
-		-e NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-$(API_URL)} \
+		-e NEXT_PUBLIC_API_URL=$${NEXT_PUBLIC_API_URL:-$(API_URL)} \
 		$(DOCKER_IMAGE):$(DOCKER_TAG)
 	@echo "$(BLUE)Waiting for container to be ready...$(NC)"
 	@sleep 10
@@ -185,6 +185,9 @@ update-nginx: ## Update nginx configuration and restart
 		echo "$(YELLOW)Please ensure the unified nginx config is in place$(NC)"; \
 		exit 1; \
 	fi
+	@echo "$(BLUE)Copying nginx config to backend container...$(NC)"
+	@docker cp nginx/conf.d/default.conf $(NGINX_CONTAINER):/etc/nginx/conf.d/default.conf || \
+		echo "$(YELLOW)Note: Could not copy config directly, nginx may need manual update$(NC)"
 	@echo "$(BLUE)Restarting nginx container...$(NC)"
 	@docker restart $(NGINX_CONTAINER) || echo "$(RED)Failed to restart nginx container$(NC)"
 	@echo "$(GREEN)✅ Nginx updated and restarted!$(NC)"
@@ -245,3 +248,22 @@ health: ## Check container health
 	@docker exec $(CONTAINER_NAME) wget --quiet --tries=1 --spider http://localhost:3000 2>/dev/null && \
 		echo "$(GREEN)✅ Container is healthy$(NC)" || \
 		echo "$(RED)❌ Container is unhealthy$(NC)"
+
+# Debug commands
+debug: ## Show debug information
+	@echo "$(GREEN)Debug Information:$(NC)"
+	@echo "$(BLUE)Variables:$(NC)"
+	@echo "  PROJECT_NAME: $(PROJECT_NAME)"
+	@echo "  CONTAINER_NAME: $(CONTAINER_NAME)"
+	@echo "  DOCKER_IMAGE: $(DOCKER_IMAGE)"
+	@echo "  BACKEND_NETWORK: $(BACKEND_NETWORK)"
+	@echo "  DOMAIN: $(DOMAIN)"
+	@echo "  API_URL: $(API_URL)"
+	@echo ""
+	@echo "$(BLUE)Environment file:$(NC)"
+	@if [ -f .env ]; then \
+		echo "  .env exists"; \
+		cat .env; \
+	else \
+		echo "  .env not found"; \
+	fi
