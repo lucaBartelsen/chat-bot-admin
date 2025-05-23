@@ -21,6 +21,9 @@ COPY . .
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# Create public directory if it doesn't exist
+RUN mkdir -p public
+
 # Build the Next.js app
 RUN npm run build
 
@@ -35,6 +38,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Create public directory and copy if it exists
+RUN mkdir -p public
 COPY --from=builder /app/public ./public
 
 # Set the correct permission for prerender cache
