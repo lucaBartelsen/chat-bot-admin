@@ -1,12 +1,10 @@
-.PHONY: help setup build deploy start stop restart logs clean dev test lint format check status update-nginx backup restore
-
 # Project configuration
-PROJECT_NAME = fanfix-chatassist-frontend
+PROJECT_NAME = chatsassistant-frontend
 DOCKER_IMAGE = $(PROJECT_NAME)
 DOCKER_TAG = latest
-CONTAINER_NAME = fanfix-frontend
-NGINX_CONTAINER = fanfix-api-nginx-1
-BACKEND_NETWORK = fanfix-api_default
+CONTAINER_NAME = PROJECT_NAME = chatsassistant-frontend
+NGINX_CONTAINER = chat-bot-api_nginx_1
+BACKEND_NETWORK = chat-bot-api_default
 DOMAIN = chatsassistant.com
 API_URL = https://$(DOMAIN)/api
 

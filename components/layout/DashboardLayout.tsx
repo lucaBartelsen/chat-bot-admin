@@ -100,7 +100,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             }}
           >
             <ChatIcon sx={{ color: 'primary.main' }} />
-            FanFix ChatAssist
+            ChatsAssistant
           </Typography>
 
           {/* Right side actions */}

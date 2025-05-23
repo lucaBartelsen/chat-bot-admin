@@ -13,7 +13,7 @@ const inter = Inter({
 
 // Metadata for the application
 export const metadata: Metadata = {
-  title: 'FanFix ChatAssist - Admin Dashboard',
+  title: 'ChatsAssistant - Admin Dashboard',
   description: 'Admin dashboard for managing creators and chat suggestions',
 };
 

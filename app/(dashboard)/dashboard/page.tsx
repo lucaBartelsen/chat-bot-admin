@@ -83,7 +83,7 @@ export default function DashboardPage() {
       </Typography>
       
       <Typography variant="body1" color="text.secondary" paragraph>
-        Welcome to the FanFix ChatAssist admin dashboard. View stats and manage your creators.
+        Welcome to the ChatsAssistant admin dashboard. View stats and manage your creators.
       </Typography>
       
       {/* FIXED: Stats Cards - Updated Grid usage to Material-UI v7 syntax */}

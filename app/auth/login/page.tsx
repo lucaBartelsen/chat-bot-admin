@@ -99,7 +99,7 @@ export default function LoginPage() {
             <ChatIcon sx={{ fontSize: 40, color: 'white' }} />
           </Box>
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-            FanFix ChatAssist
+            ChatsAssistant
           </Typography>
           <Typography variant="body1" color="text.secondary" align="center">
             Sign in to access your admin dashboard

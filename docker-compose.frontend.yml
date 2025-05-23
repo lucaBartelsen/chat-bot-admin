@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=https://chatsassistant.com/api
-    container_name: fanfix-frontend
+    container_name: chatsassistant-frontend
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://chatsassistant.com/api

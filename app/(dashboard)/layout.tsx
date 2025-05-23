@@ -33,7 +33,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom fontWeight="bold" color="primary">
-          FanFix ChatAssist
+          ChatsAssistant
         </Typography>
         <CircularProgress color="primary" />
         <Typography variant="body1" color="text.secondary">
