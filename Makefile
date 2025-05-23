@@ -1,5 +1,3 @@
-.PHONY: help setup build deploy start stop restart logs clean dev test lint format check status update-nginx backup restore
-
 # Project configuration
 PROJECT_NAME = chatsassistant-frontend
 DOCKER_IMAGE = $(PROJECT_NAME)
