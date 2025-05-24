@@ -1,4 +1,4 @@
-// app/(dashboard)/creators/[id]/page.tsx - Fixed with React.use()
+// app/(dashboard)/creators/[id]/page.tsx - Updated to handle guaranteed style config
 
 'use client';
 
@@ -105,13 +105,14 @@ function a11yProps(index: number) {
 
 // Creator detail page component
 export default function CreatorDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  // FIXED: Unwrap params using React.use()
+  // Unwrap params using React.use()
   const resolvedParams = use(params);
   const router = useRouter();
   const [tabValue, setTabValue] = useState(0);
   const [creator, setCreator] = useState<Creator | null>(null);
   const [creatorStyle, setCreatorStyle] = useState<CreatorStyle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [styleLoading, setStyleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -122,34 +123,47 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ id: st
       setError(null);
       
       try {
-        // FIXED: Use resolvedParams.id instead of params.id
+        console.log('🔄 Fetching creator data...');
+        
+        // Fetch creator details
         const creatorData = await apiClient.get<Creator>(`/creators/${resolvedParams.id}`);
         setCreator(creatorData);
+        console.log('✅ Creator data loaded:', creatorData.name);
         
+        // Fetch creator style - should always exist now due to auto-creation
+        setStyleLoading(true);
         try {
-          // Fetch creator style (this might not exist yet for new creators)
           const styleData = await apiClient.get<CreatorStyle>(`/creators/${resolvedParams.id}/style`);
           setCreatorStyle(styleData);
+          console.log('✅ Creator style loaded with', 
+            styleData.approved_emojis?.length || 0, 'emojis and',
+            styleData.tone_range?.length || 0, 'tones'
+          );
         } catch (styleError: any) {
-          // If 404, it means the style doesn't exist yet - this is normal
-          if (styleError.response?.status !== 404) {
-            console.error('Error fetching creator style:', styleError);
+          console.warn('⚠️ Failed to load creator style:', styleError);
+          // Style should always exist now, but handle gracefully
+          if (styleError.response?.status === 404) {
+            console.log('⚠️ Style config missing - it will be auto-created on next API call');
+          } else {
+            console.error('❌ Unexpected error loading style:', styleError);
           }
           setCreatorStyle(null);
+        } finally {
+          setStyleLoading(false);
         }
+        
       } catch (error: any) {
-        console.error('Error fetching creator:', error);
+        console.error('❌ Error fetching creator:', error);
         setError(error.response?.data?.detail || error.message || 'Failed to load creator data');
       } finally {
         setLoading(false);
       }
     };
 
-    // FIXED: Use resolvedParams.id instead of params.id
     if (resolvedParams.id) {
       fetchCreatorData();
     }
-  }, [resolvedParams.id]); // FIXED: Updated dependency array
+  }, [resolvedParams.id]);
 
   // Handle tab change
   const handleTabChange = (event: SyntheticEvent, newValue: number) => {
@@ -162,21 +176,24 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ id: st
     
     try {
       const newStatus = event.target.checked;
+      console.log(`🔄 ${newStatus ? 'Activating' : 'Deactivating'} creator...`);
+      
       // Call API to update creator status
       await apiClient.patch(`/creators/${creator.id}`, { is_active: newStatus });
       
       // Update local state
       setCreator({ ...creator, is_active: newStatus });
       setSuccess(`Creator ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      
+      console.log(`✅ Creator ${newStatus ? 'activated' : 'deactivated'} successfully`);
     } catch (error: any) {
-      console.error('Error updating creator status:', error);
+      console.error('❌ Error updating creator status:', error);
       setError(error.response?.data?.detail || error.message || 'Failed to update status');
     }
   };
 
   // Handle edit click
   const handleEditClick = () => {
-    // FIXED: Use resolvedParams.id instead of params.id
     router.push(`/creators/${resolvedParams.id}/edit`);
   };
 
@@ -282,6 +299,38 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ id: st
             <Typography variant="body1" color="white" sx={{ opacity: 0.9, maxWidth: 600 }}>
               {creator.description || 'No description provided.'}
             </Typography>
+            
+            {/* Style config status indicator */}
+            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              {styleLoading ? (
+                <>
+                  <CircularProgress size={16} sx={{ color: 'white' }} />
+                  <Typography variant="body2" color="white" sx={{ opacity: 0.8 }}>
+                    Loading style configuration...
+                  </Typography>
+                </>
+              ) : creatorStyle ? (
+                <Chip 
+                  label="Style Configured" 
+                  size="small" 
+                  sx={{ 
+                    bgcolor: 'success.main', 
+                    color: 'white',
+                    fontWeight: 500
+                  }} 
+                />
+              ) : (
+                <Chip 
+                  label="Default Style" 
+                  size="small" 
+                  sx={{ 
+                    bgcolor: 'warning.main', 
+                    color: 'white',
+                    fontWeight: 500
+                  }} 
+                />
+              )}
+            </Box>
           </Box>
           
           {/* Actions */}
@@ -340,7 +389,9 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ id: st
             label="Style Config" 
             icon={<SettingsIcon />} 
             iconPosition="start" 
-            {...a11yProps(1)} 
+            {...a11yProps(1)}
+            // Show loading indicator on style tab if style is loading
+            disabled={styleLoading}
           />
           <Tab 
             label="Style Examples" 
@@ -374,13 +425,22 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ id: st
       </TabPanel>
       
       <TabPanel value={tabValue} index={1}>
-        <StyleConfigTab 
-          creatorStyle={creatorStyle} 
-          creatorId={creator.id} 
-          setCreatorStyle={setCreatorStyle}
-          setSuccess={setSuccess}
-          setError={setError}
-        />
+        {styleLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+            <CircularProgress />
+            <Typography variant="body1" sx={{ ml: 2 }}>
+              Loading style configuration...
+            </Typography>
+          </Box>
+        ) : (
+          <StyleConfigTab 
+            creatorStyle={creatorStyle} 
+            creatorId={creator.id} 
+            setCreatorStyle={setCreatorStyle}
+            setSuccess={setSuccess}
+            setError={setError}
+          />
+        )}
       </TabPanel>
       
       <TabPanel value={tabValue} index={2}>

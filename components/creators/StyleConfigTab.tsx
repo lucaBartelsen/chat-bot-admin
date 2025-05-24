@@ -1,4 +1,5 @@
-// components/creators/StyleConfigTab.tsx - Fixed type issues
+// components/creators/StyleConfigTab.tsx - Updated for guaranteed style configs
+
 'use client';
 
 import { useState } from 'react';
@@ -25,10 +26,14 @@ import {
   TableRow,
   CircularProgress,
   Switch,
+  Alert,
+  Divider,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SaveIcon from '@mui/icons-material/Save';
+import RestoreIcon from '@mui/icons-material/Restore';
+import InfoIcon from '@mui/icons-material/Info';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -68,6 +73,41 @@ const toneOptions = [
   'thoughtful', 'inspirational', 'sarcastic', 'respectful'
 ];
 
+// Default values that match the backend auto-creation
+const getDefaultValues = (creatorStyle: CreatorStyle | null): StyleConfigFormValues => ({
+  case_style: (creatorStyle?.case_style as 'lowercase' | 'uppercase' | 'sentence' | 'title' | 'custom') || 'sentence',
+  approved_emojis: creatorStyle?.approved_emojis || ["😊", "❤️", "😘", "😉", "👋", "🔥", "💕", "😍", "🥰", "💋"],
+  sentence_separators: creatorStyle?.sentence_separators || ['.', '!', '?'],
+  text_replacements: creatorStyle?.text_replacements || {
+    "you": "u",
+    "your": "ur", 
+    "because": "bc",
+    "probably": "prob",
+    "definitely": "def"
+  },
+  common_abbreviations: creatorStyle?.common_abbreviations || {
+    "btw": "by the way",
+    "omg": "oh my god", 
+    "lol": "laugh out loud",
+    "tbh": "to be honest",
+    "imo": "in my opinion",
+    "rn": "right now",
+    "ngl": "not gonna lie"
+  },
+  message_length_preferences: creatorStyle?.message_length_preferences || {
+    min_length: 10,
+    max_length: 500,
+    optimal_length: 150
+  },
+  punctuation_rules: creatorStyle?.punctuation_rules || {
+    use_ellipsis: true,
+    use_exclamations: true,
+    max_consecutive_exclamations: 2
+  },
+  style_instructions: creatorStyle?.style_instructions || "Write in a friendly, conversational tone. Keep messages engaging and personal. Use casual language that feels natural and authentic. Vary your responses to avoid sounding repetitive.",
+  tone_range: creatorStyle?.tone_range || ["friendly", "casual", "enthusiastic", "supportive", "playful"]
+});
+
 // Form validation schema - updated to match CreatorStyle interface
 const styleConfigSchema = z.object({
   case_style: z.enum(['lowercase', 'uppercase', 'sentence', 'title', 'custom']).nullable(),
@@ -101,29 +141,11 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
   const [newAbbreviationKey, setNewAbbreviationKey] = useState('');
   const [newAbbreviationValue, setNewAbbreviationValue] = useState('');
 
-  // Initialize form with creator style data
-  const defaultValues: StyleConfigFormValues = {
-    case_style: creatorStyle?.case_style as any || 'sentence',
-    approved_emojis: creatorStyle?.approved_emojis || [],
-    sentence_separators: creatorStyle?.sentence_separators || ['.', '!', '?'],
-    text_replacements: creatorStyle?.text_replacements || {},
-    common_abbreviations: creatorStyle?.common_abbreviations || {},
-    message_length_preferences: creatorStyle?.message_length_preferences || {
-      min_length: 0,
-      max_length: 500,
-      optimal_length: 250,
-    },
-    punctuation_rules: creatorStyle?.punctuation_rules || {
-      use_ellipsis: true,
-      use_exclamations: true,
-      max_consecutive_exclamations: 2,
-    },
-    style_instructions: creatorStyle?.style_instructions || '',
-    tone_range: creatorStyle?.tone_range || [],
-  };
+  // Initialize form with creator style data or defaults
+  const defaultValues: StyleConfigFormValues = getDefaultValues(creatorStyle);
 
   // Set up form
-  const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<StyleConfigFormValues>({
+  const { control, handleSubmit, watch, setValue, reset, formState: { errors, isDirty } } = useForm<StyleConfigFormValues>({
     resolver: zodResolver(styleConfigSchema),
     defaultValues,
   });
@@ -134,12 +156,21 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
   const watchReplacements = watch('text_replacements');
   const watchAbbreviations = watch('common_abbreviations');
 
+  // Reset to defaults
+  const handleResetToDefaults = () => {
+    const defaults = getDefaultValues(null); // Get fresh defaults
+    reset(defaults);
+    setSuccess('Form reset to default values');
+  };
+
   // Handle form submission
   const onSubmit = async (data: StyleConfigFormValues) => {
     setSaving(true);
     setError(null);
     
     try {
+      console.log('💾 Saving style configuration...', data);
+      
       // Prepare the data to send to the API
       const apiData = {
         ...data,
@@ -150,9 +181,11 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
       if (creatorStyle) {
         // Update existing style
         response = await apiClient.patch(`/creators/${creatorId}/style`, apiData);
+        console.log('✅ Style configuration updated');
       } else {
-        // Create new style
+        // This case should rarely happen now due to auto-creation
         response = await apiClient.post(`/creators/${creatorId}/style`, apiData);
+        console.log('✅ Style configuration created');
       }
       
       // Create updated style object with proper structure
@@ -175,7 +208,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
       setCreatorStyle(updatedStyle);
       setSuccess('Style configuration saved successfully!');
     } catch (err: any) {
-      console.error('Error updating style config:', err);
+      console.error('❌ Error updating style config:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to update style configuration');
     } finally {
       setSaving(false);
@@ -260,6 +293,16 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
 
   return (
     <Box>
+      {/* Info alert for new creators */}
+      {!creatorStyle && (
+        <Alert severity="info" sx={{ mb: 3 }} icon={<InfoIcon />}>
+          <Typography variant="body2">
+            <strong>Default Configuration Loaded:</strong> This creator has been set up with a sensible default style configuration. 
+            You can customize these settings below to match the creator's unique writing style.
+          </Typography>
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)}>
         <Grid container spacing={3}>
           {/* Text styling options */}
@@ -294,10 +337,10 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
               
               <Box sx={{ mt: 4 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  Approved Emojis
+                  Approved Emojis ({watchEmojis?.length || 0})
                 </Typography>
                 
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, minHeight: 40 }}>
                   {watchEmojis && watchEmojis.map((emoji) => (
                     <Chip
                       key={emoji}
@@ -306,6 +349,11 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                       sx={{ fontSize: '1.2rem' }}
                     />
                   ))}
+                  {(!watchEmojis || watchEmojis.length === 0) && (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      No emojis configured
+                    </Typography>
+                  )}
                 </Box>
                 
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -328,10 +376,10 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
               
               <Box sx={{ mt: 4 }}>
                 <Typography variant="subtitle2" gutterBottom>
-                  Sentence Separators
+                  Sentence Separators ({watchSeparators?.length || 0})
                 </Typography>
                 
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, minHeight: 40 }}>
                   {watchSeparators && watchSeparators.map((separator) => (
                     <Chip
                       key={separator}
@@ -339,6 +387,11 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                       onDelete={() => handleRemoveSeparator(separator)}
                     />
                   ))}
+                  {(!watchSeparators || watchSeparators.length === 0) && (
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      No separators configured
+                    </Typography>
+                  )}
                 </Box>
                 
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -490,13 +543,13 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Text Replacements
+                Text Replacements ({Object.keys(watchReplacements || {}).length})
               </Typography>
               <Typography variant="body2" color="text.secondary" paragraph>
                 Define words or phrases that should be replaced with alternatives.
               </Typography>
               
-              <TableContainer sx={{ mb: 3 }}>
+              <TableContainer sx={{ mb: 3, maxHeight: 300 }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -524,7 +577,9 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                     {(!watchReplacements || Object.keys(watchReplacements).length === 0) && (
                       <TableRow>
                         <TableCell colSpan={3} align="center">
-                          No text replacements defined
+                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            No text replacements defined
+                          </Typography>
                         </TableCell>
                       </TableRow>
                     )}
@@ -562,13 +617,13 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Common Abbreviations
+                Common Abbreviations ({Object.keys(watchAbbreviations || {}).length})
               </Typography>
               <Typography variant="body2" color="text.secondary" paragraph>
                 Define abbreviations commonly used by this creator.
               </Typography>
               
-              <TableContainer sx={{ mb: 3 }}>
+              <TableContainer sx={{ mb: 3, maxHeight: 300 }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -596,7 +651,9 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
                     {(!watchAbbreviations || Object.keys(watchAbbreviations).length === 0) && (
                       <TableRow>
                         <TableCell colSpan={3} align="center">
-                          No abbreviations defined
+                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            No abbreviations defined
+                          </Typography>
                         </TableCell>
                       </TableRow>
                     )}
@@ -634,7 +691,7 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
           <Grid size={12}>
             <Paper sx={{ p: 3, borderRadius: 2 }}>
               <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Tone Range
+                Tone Range ({(watch('tone_range') || []).length} selected)
               </Typography>
               <Typography variant="body2" color="text.secondary" paragraph>
                 Select the tones that best describe this creator's writing style.
@@ -704,8 +761,42 @@ export default function StyleConfigTab({ creatorStyle, creatorId, setCreatorStyl
           </Grid>
         </Grid>
         
-        {/* Save button */}
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Action buttons */}
+        <Box sx={{ 
+          mt: 4, 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 2,
+          pt: 3,
+          borderTop: 1,
+          borderColor: 'divider'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {isDirty ? '• Unsaved changes' : '• All changes saved'}
+            </Typography>
+            
+            {creatorStyle && (
+              <Typography variant="body2" color="text.secondary">
+                Last updated: {new Date(creatorStyle.updated_at).toLocaleString()}
+              </Typography>
+            )}
+            
+            <Divider orientation="vertical" flexItem />
+            
+            <Button
+              variant="outlined"
+              startIcon={<RestoreIcon />}
+              onClick={handleResetToDefaults}
+              disabled={saving}
+              size="small"
+            >
+              Reset to Defaults
+            </Button>
+          </Box>
+          
           <Button
             type="submit"
             variant="contained"
