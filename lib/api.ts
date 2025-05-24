@@ -1,8 +1,8 @@
-// lib/api.ts - Enhanced version with better error handling and logging
+// lib/api.ts - Enhanced version with user management and better error handling
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
 // Create an axios instance
-const api = axios.create({
+const axiosInstance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
   headers: {
     'Content-Type': 'application/json',
@@ -24,7 +24,7 @@ const getStoredToken = (): string | null => {
 };
 
 // Request interceptor for adding auth token
-api.interceptors.request.use(
+axiosInstance.interceptors.request.use(
   (config) => {
     console.log('🚀 Making API request to:', config.method?.toUpperCase(), config.url);
     
@@ -54,7 +54,7 @@ api.interceptors.request.use(
 );
 
 // Response interceptor for handling errors
-api.interceptors.response.use(
+axiosInstance.interceptors.response.use(
   (response) => {
     console.log('✅ API Response:', response.status, response.config?.method?.toUpperCase(), response.config?.url);
     return response;
@@ -138,7 +138,7 @@ const createApiError = (error: AxiosError): ApiError => {
 // Reusable API methods with enhanced error handling
 export const apiClient = {
   get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-    return api.get(url, config)
+    return axiosInstance.get(url, config)
       .then((response: AxiosResponse<T>) => response.data)
       .catch((error: AxiosError) => {
         throw createApiError(error);
@@ -146,7 +146,7 @@ export const apiClient = {
   },
   
   post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-    return api.post(url, data, config)
+    return axiosInstance.post(url, data, config)
       .then((response: AxiosResponse<T>) => response.data)
       .catch((error: AxiosError) => {
         throw createApiError(error);
@@ -154,7 +154,7 @@ export const apiClient = {
   },
   
   put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-    return api.put(url, data, config)
+    return axiosInstance.put(url, data, config)
       .then((response: AxiosResponse<T>) => response.data)
       .catch((error: AxiosError) => {
         throw createApiError(error);
@@ -162,7 +162,7 @@ export const apiClient = {
   },
   
   patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> => {
-    return api.patch(url, data, config)
+    return axiosInstance.patch(url, data, config)
       .then((response: AxiosResponse<T>) => response.data)
       .catch((error: AxiosError) => {
         throw createApiError(error);
@@ -170,7 +170,7 @@ export const apiClient = {
   },
   
   delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> => {
-    return api.delete(url, config)
+    return axiosInstance.delete(url, config)
       .then((response: AxiosResponse<T>) => response.data)
       .catch((error: AxiosError) => {
         throw createApiError(error);
@@ -178,7 +178,125 @@ export const apiClient = {
   },
 };
 
-// Specific API functions for common operations
+// Type definitions for API responses
+interface User {
+  id: number;
+  email: string;
+  is_active: boolean;
+  is_verified: boolean;
+  is_admin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface UserPreference {
+  id: number;
+  user_id: number;
+  openai_api_key: string | null;
+  default_model: string;
+  suggestion_count: number;
+  selected_creators: number[] | null;
+}
+
+interface UserWithPreferences extends User {
+  preferences?: UserPreference;
+}
+
+interface UsersResponse {
+  items: User[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
+
+interface UserStats {
+  total_users: number;
+  active_users: number;
+  inactive_users: number;
+  admin_users: number;
+  verified_users: number;
+  unverified_users: number;
+}
+
+interface Creator {
+  id: number;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CreatorsResponse {
+  items: Creator[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
+
+// User Management API functions
+export const usersApi = {
+  // Get all users with pagination and filtering
+  getUsers: (params?: {
+    skip?: number;
+    limit?: number;
+    search?: string;
+    is_active?: boolean;
+    is_admin?: boolean;
+  }) => apiClient.get<UsersResponse>('/users/', { params }),
+  
+  // Get a single user by ID with preferences
+  getUser: (id: number) => apiClient.get<UserWithPreferences>(`/users/${id}`),
+  
+  // Create a new user
+  createUser: (data: {
+    email: string;
+    password: string;
+    is_admin?: boolean;
+    is_active?: boolean;
+    openai_api_key?: string;
+    default_model?: string;
+    suggestion_count?: number;
+  }) => apiClient.post<User>('/users/', data),
+  
+  // Update a user
+  updateUser: (id: number, data: {
+    email?: string;
+    is_active?: boolean;
+    is_admin?: boolean;
+    is_verified?: boolean;
+  }) => apiClient.patch<User>(`/users/${id}`, data),
+  
+  // Delete a user
+  deleteUser: (id: number) => apiClient.delete(`/users/${id}`),
+  
+  // User status management
+  activateUser: (id: number) => apiClient.post<User>(`/users/${id}/activate`),
+  deactivateUser: (id: number) => apiClient.post<User>(`/users/${id}/deactivate`),
+  
+  // Admin role management
+  makeAdmin: (id: number) => apiClient.post<User>(`/users/${id}/make-admin`),
+  removeAdmin: (id: number) => apiClient.post<User>(`/users/${id}/remove-admin`),
+  
+  // Password management
+  resetPassword: (id: number, data: { new_password: string }) => 
+    apiClient.post(`/users/${id}/reset-password`, data),
+  
+  // User preferences
+  getUserPreferences: (id: number) => apiClient.get<UserPreference>(`/users/${id}/preferences`),
+  updateUserPreferences: (id: number, data: Partial<UserPreference>) => 
+    apiClient.patch<UserPreference>(`/users/${id}/preferences`, data),
+  
+  // Statistics and bulk operations
+  getUserStats: () => apiClient.get<UserStats>('/users/stats/summary'),
+  bulkActivateUsers: (userIds: number[]) => apiClient.post('/users/bulk-activate', userIds),
+  bulkDeactivateUsers: (userIds: number[]) => apiClient.post('/users/bulk-deactivate', userIds),
+};
+
+// Creators API functions (existing)
 export const creatorsApi = {
   // Get all creators with pagination and filtering
   getCreators: (params?: {
@@ -186,22 +304,16 @@ export const creatorsApi = {
     limit?: number;
     search?: string;
     is_active?: boolean;
-  }) => apiClient.get<{
-    items: any[];
-    total: number;
-    page: number;
-    size: number;
-    pages: number;
-  }>('/creators', { params }),
+  }) => apiClient.get<CreatorsResponse>('/creators', { params }),
   
   // Get a single creator by ID
-  getCreator: (id: number) => apiClient.get(`/creators/${id}`),
+  getCreator: (id: number) => apiClient.get<Creator>(`/creators/${id}`),
   
   // Create a new creator
-  createCreator: (data: any) => apiClient.post('/creators', data),
+  createCreator: (data: any) => apiClient.post<Creator>('/creators', data),
   
   // Update a creator
-  updateCreator: (id: number, data: any) => apiClient.patch(`/creators/${id}`, data),
+  updateCreator: (id: number, data: any) => apiClient.patch<Creator>(`/creators/${id}`, data),
   
   // Delete a creator
   deleteCreator: (id: number) => apiClient.delete(`/creators/${id}`),
@@ -230,7 +342,149 @@ export const creatorsApi = {
     category?: string;
     search?: string;
   }) => apiClient.get(`/creators/${id}/response-examples`, { params }),
+  
+  // Creator statistics
+  getCreatorStats: (id: number) => apiClient.get(`/creators/${id}/statistics`),
+  getCreatorCategories: (id: number) => apiClient.get(`/creators/${id}/categories`),
+  
+  // Creator status management
+  activateCreator: (id: number) => apiClient.post<Creator>(`/creators/${id}/activate`),
+  deactivateCreator: (id: number) => apiClient.post<Creator>(`/creators/${id}/deactivate`),
+};
+
+// Authentication API functions
+export const authApi = {
+  // Login user
+  login: (credentials: { username: string; password: string }) => 
+    apiClient.post('/auth/login', credentials, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }),
+  
+  // Register user (admin only)
+  register: (data: { email: string; password: string }) => 
+    apiClient.post('/auth/register', data),
+  
+  // Get current user
+  getCurrentUser: () => apiClient.get('/auth/me'),
+  
+  // Get user preferences
+  getUserPreferences: () => apiClient.get('/auth/preferences'),
+  
+  // Update user preferences
+  updateUserPreferences: (preferences: any) => 
+    apiClient.patch('/auth/preferences', preferences),
+};
+
+// Suggestions API functions
+export const suggestionsApi = {
+  // Get AI suggestions
+  getSuggestions: (data: {
+    creator_id: number;
+    fan_message: string;
+    model?: string;
+    suggestion_count?: number;
+    use_similar_conversations?: boolean;
+    similarity_threshold?: number;
+  }) => apiClient.post('/suggestions', data),
+  
+  // Get suggestion statistics
+  getStats: () => apiClient.get('/suggestions/stats'),
+  
+  // Clear stored vectors
+  clearVectors: (creator_id?: number) => 
+    apiClient.post('/suggestions/clear', { creator_id }),
+  
+  // Store feedback
+  storeFeedback: (data: {
+    creator_id: number;
+    fan_message: string;
+    selected_response: string;
+  }) => apiClient.post('/suggestions/store-feedback', data),
+};
+
+// Examples API functions (style and response examples)
+export const examplesApi = {
+  // Style Examples
+  createStyleExample: (creatorId: number, data: {
+    fan_message: string;
+    creator_response: string;
+    category?: string;
+  }) => apiClient.post(`/creators/${creatorId}/style-examples`, data),
+  
+  updateStyleExample: (creatorId: number, exampleId: number, data: any) => 
+    apiClient.patch(`/creators/${creatorId}/style-examples/${exampleId}`, data),
+  
+  deleteStyleExample: (creatorId: number, exampleId: number) => 
+    apiClient.delete(`/creators/${creatorId}/style-examples/${exampleId}`),
+  
+  bulkCreateStyleExamples: (creatorId: number, examples: any[]) => 
+    apiClient.post(`/creators/${creatorId}/bulk-style-examples`, examples),
+  
+  // Response Examples
+  createResponseExample: (creatorId: number, data: {
+    fan_message: string;
+    responses: Array<{
+      response_text: string;
+      ranking?: number;
+    }>;
+    category?: string;
+  }) => apiClient.post(`/creators/${creatorId}/response-examples`, data),
+  
+  getResponseExample: (creatorId: number, exampleId: number) => 
+    apiClient.get(`/creators/${creatorId}/response-examples/${exampleId}`),
+  
+  deleteResponseExample: (creatorId: number, exampleId: number) => 
+    apiClient.delete(`/creators/${creatorId}/response-examples/${exampleId}`),
+  
+  bulkCreateResponseExamples: (creatorId: number, examples: any[]) => 
+    apiClient.post(`/creators/${creatorId}/bulk-response-examples`, examples),
+  
+  // Similarity search
+  findSimilarStyleExamples: (creatorId: number, data: {
+    fan_message: string;
+    category?: string;
+    similarity_threshold?: number;
+    limit?: number;
+  }) => apiClient.post(`/creators/${creatorId}/similar-style-examples`, data),
+  
+  findSimilarResponseExamples: (creatorId: number, data: {
+    fan_message: string;
+    category?: string;
+    similarity_threshold?: number;
+    limit?: number;
+  }) => apiClient.post(`/creators/${creatorId}/similar-response-examples`, data),
+};
+
+// Health and diagnostics API functions
+export const diagnosticsApi = {
+  // Health check
+  healthCheck: () => apiClient.get('/health'),
+  
+  // System information
+  getSystemInfo: () => apiClient.get('/diagnostics/info'),
+  
+  // Database diagnostics
+  getDatabaseDiagnostics: () => apiClient.get('/diagnostics/database'),
+  
+  // Routes information
+  getRoutes: () => apiClient.get('/diagnostics/routes'),
+  
+  // OpenAPI schema
+  getOpenApiSchema: () => apiClient.get('/diagnostics/openapi'),
+};
+
+// Export the organized API object for easy access
+export const api = {
+  users: usersApi,
+  creators: creatorsApi,
+  auth: authApi,
+  suggestions: suggestionsApi,
+  examples: examplesApi,
+  diagnostics: diagnosticsApi,
 };
 
 // Export the axios instance for direct use if needed
-export default api;
+export { axiosInstance };
+
+// Default export is the apiClient for backward compatibility
+export default apiClient;

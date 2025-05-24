@@ -1,4 +1,4 @@
-// app/(dashboard)/users/page.tsx
+// app/(dashboard)/users/page.tsx - Enhanced Users Management
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -36,6 +36,15 @@ import {
   FormControlLabel,
   Snackbar,
   Grid,
+  Card,
+  CardContent,
+  CardActions,
+  Divider,
+  Stack,
+  Badge,
+  Menu,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import { useForm, Controller, SubmitHandler } from 'react-hook-form';
 import { z } from 'zod';
@@ -49,10 +58,16 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import KeyIcon from '@mui/icons-material/Key';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import PersonOffIcon from '@mui/icons-material/PersonOff';
+import SecurityIcon from '@mui/icons-material/Security';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import GetAppIcon from '@mui/icons-material/GetApp';
 import { apiClient } from '../../../lib/api';
 import { format } from 'date-fns';
 
-// User interface
+// Enhanced interfaces
 interface User {
   id: number;
   email: string;
@@ -63,7 +78,6 @@ interface User {
   updated_at: string;
 }
 
-// User preferences
 interface UserPreference {
   id: number;
   user_id: number;
@@ -73,159 +87,171 @@ interface UserPreference {
   selected_creators: number[] | null;
 }
 
-// Create user form validation schema
+interface UserWithPreferences extends User {
+  preferences?: UserPreference;
+}
+
+interface UsersResponse {
+  items: User[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
+
+// Enhanced form validation schemas
 const createUserSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
-  is_admin: z.boolean(), // Remove .default() to make it required
-  openai_api_key: z.string().nullable(), // Remove .default() 
-  default_model: z.string(), // Remove .default()
-  suggestion_count: z.number().int().min(1).max(10), // Remove .default()
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  is_admin: z.boolean(),
+  is_active: z.boolean(),
+  openai_api_key: z.string().optional(),
+  default_model: z.string(),
+  suggestion_count: z.number().int().min(1).max(10),
 });
 
-// Form type from schema
+const editUserSchema = z.object({
+  email: z.string().email('Please enter a valid email address'),
+  is_admin: z.boolean(),
+  is_active: z.boolean(),
+  is_verified: z.boolean(),
+});
+
+const resetPasswordSchema = z.object({
+  new_password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
 type CreateUserFormValues = z.infer<typeof createUserSchema>;
+type EditUserFormValues = z.infer<typeof editUserSchema>;
+type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
 
 // Default models for OpenAI
 const models = ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 
 export default function UsersPage() {
+  // State management
   const [users, setUsers] = useState<User[]>([]);
-  const [preferences, setPreferences] = useState<Record<number, UserPreference>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [viewUserOpen, setViewUserOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserWithPreferences | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'admin'>('all');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [menuUser, setMenuUser] = useState<User | null>(null);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [userStats, setUserStats] = useState({
+    total_users: 0,
+    active_users: 0,
+    inactive_users: 0,
+    admin_users: 0,
+    verified_users: 0,
+    unverified_users: 0,
+  });
+  const [bulkSelection, setBulkSelection] = useState<number[]>([]);
 
-  // Example mock data - replace with actual API call
-  const mockUsers: User[] = [
-    {
-      id: 1,
-      email: 'admin@example.com',
-      is_active: true,
-      is_verified: true,
-      is_admin: true,
-      created_at: '2025-01-15T12:00:00Z',
-      updated_at: '2025-05-01T09:30:00Z'
-    },
-    {
-      id: 2,
-      email: 'creator_manager@example.com',
-      is_active: true,
-      is_verified: true,
-      is_admin: false,
-      created_at: '2025-02-10T14:30:00Z',
-      updated_at: '2025-04-20T15:45:00Z'
-    },
-    {
-      id: 3,
-      email: 'api_user@example.com',
-      is_active: true,
-      is_verified: true,
-      is_admin: false,
-      created_at: '2025-03-05T11:20:00Z',
-      updated_at: '2025-04-15T10:10:00Z'
-    },
-    {
-      id: 4,
-      email: 'inactive@example.com',
-      is_active: false,
-      is_verified: false,
-      is_admin: false,
-      created_at: '2025-03-20T16:40:00Z',
-      updated_at: '2025-04-10T08:15:00Z'
-    }
-  ];
-
-  const mockPreferences: Record<number, UserPreference> = {
-    1: {
-      id: 1,
-      user_id: 1,
-      openai_api_key: 'sk-123456789abcdefghij123456789abcdefghij1234',
-      default_model: 'gpt-4',
-      suggestion_count: 3,
-      selected_creators: [1, 2, 3]
-    },
-    2: {
-      id: 2,
-      user_id: 2,
-      openai_api_key: null,
-      default_model: 'gpt-4-turbo',
-      suggestion_count: 5,
-      selected_creators: [1, 2]
-    },
-    3: {
-      id: 3,
-      user_id: 3,
-      openai_api_key: 'sk-abcdefghij123456789abcdefghij123456789abcd',
-      default_model: 'gpt-3.5-turbo',
-      suggestion_count: 3,
-      selected_creators: null
-    },
-    4: {
-      id: 4,
-      user_id: 4,
-      openai_api_key: null,
-      default_model: 'gpt-4',
-      suggestion_count: 3,
-      selected_creators: null
-    }
-  };
-
-  // Form for creating users
-  const { control, handleSubmit, reset, formState: { errors } } = useForm<CreateUserFormValues>({
+  // Forms
+  const createForm = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
       email: '',
+      password: '',
       is_admin: false,
-      openai_api_key: null,
+      is_active: true,
+      openai_api_key: '',
       default_model: 'gpt-4',
       suggestion_count: 3,
-    } as CreateUserFormValues, // Add type assertion
+    },
+  });
+
+  const editForm = useForm<EditUserFormValues>({
+    resolver: zodResolver(editUserSchema),
+  });
+
+  const passwordForm = useForm<ResetPasswordFormValues>({
+    resolver: zodResolver(resetPasswordSchema),
+    defaultValues: {
+      new_password: '',
+    },
   });
 
   // Fetch users from API
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
-      setError(null);
+  const fetchUsers = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const params: any = {
+        skip: page * rowsPerPage,
+        limit: rowsPerPage,
+      };
       
-      try {
-        // In a real app, you would fetch from the API
-        const response = await apiClient.get('/users');
-        setUsers(response);
-        
-        // Using mock data for now
-        setUsers(mockUsers);
-        setPreferences(mockPreferences);
-      } catch (err: any) {
-        console.error('Error fetching users:', err);
-        setError(err.message || 'Failed to load users');
-      } finally {
-        setLoading(false);
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
       }
-    };
+      
+      if (statusFilter === 'active') {
+        params.is_active = true;
+      } else if (statusFilter === 'inactive') {
+        params.is_active = false;
+      } else if (statusFilter === 'admin') {
+        params.is_admin = true;
+      }
+      
+      const response = await apiClient.get<UsersResponse>('/users/', { params });
+      
+      setUsers(response.items || []);
+      setTotalUsers(response.total || 0);
+      setTotalPages(response.pages || 1);
+      
+    } catch (err: any) {
+      console.error('Error fetching users:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to load users');
+      setUsers([]);
+      setTotalUsers(0);
+      setTotalPages(1);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // Fetch user statistics
+  const fetchUserStats = async () => {
+    try {
+      const stats = await apiClient.get('/users/stats/summary');
+      setUserStats(stats);
+    } catch (err) {
+      console.warn('Failed to fetch user stats:', err);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
     fetchUsers();
-  }, []);
+    fetchUserStats();
+  }, [page, rowsPerPage]);
 
-  // Filter users based on search query
-  const filteredUsers = users.filter((user) =>
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Handle search with debouncing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (page === 0) {
+        fetchUsers();
+      } else {
+        setPage(0); // This will trigger fetchUsers via the effect above
+      }
+    }, 500);
 
-  // Get users for current page
-  const paginatedUsers = filteredUsers.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, statusFilter]);
 
   // Handle page change
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -238,136 +264,113 @@ export default function UsersPage() {
     setPage(0);
   };
 
-  // Open create user dialog
+  // Handle menu actions
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, user: User) => {
+    setAnchorEl(event.currentTarget);
+    setMenuUser(user);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setMenuUser(null);
+  };
+
+  // Handle create user
   const handleCreateUser = () => {
-    reset({
-      email: '',
-      is_admin: false,
-      openai_api_key: null,
-      default_model: 'gpt-4',
-      suggestion_count: 3,
-    });
+    createForm.reset();
     setDialogOpen(true);
   };
 
-  // Open delete dialog
+  // Handle edit user
+  const handleEditUser = async (user: User) => {
+    try {
+      const userWithPrefs = await apiClient.get<UserWithPreferences>(`/users/${user.id}`);
+      setSelectedUser(userWithPrefs);
+      editForm.reset({
+        email: userWithPrefs.email,
+        is_admin: userWithPrefs.is_admin,
+        is_active: userWithPrefs.is_active,
+        is_verified: userWithPrefs.is_verified,
+      });
+      setEditDialogOpen(true);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to load user details');
+    }
+    handleMenuClose();
+  };
+
+  // Handle view user
+  const handleViewUser = async (user: User) => {
+    try {
+      const userWithPrefs = await apiClient.get<UserWithPreferences>(`/users/${user.id}`);
+      setSelectedUser(userWithPrefs);
+      setViewUserOpen(true);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to load user details');
+    }
+    handleMenuClose();
+  };
+
+  // Handle delete user
   const handleDeleteClick = (user: User) => {
     setSelectedUser(user);
     setDeleteDialogOpen(true);
+    handleMenuClose();
   };
 
-  // Open reset password dialog
+  // Handle reset password
   const handleResetPassword = (user: User) => {
     setSelectedUser(user);
+    passwordForm.reset();
     setResetPasswordDialogOpen(true);
+    handleMenuClose();
   };
 
-  // Open view user dialog
-  const handleViewUser = (user: User) => {
-    setSelectedUser(user);
-    setViewUserOpen(true);
-  };
-
-  // Handle form submission for create user
-  const onSubmit = async (data: CreateUserFormValues) => {
+  // Form submissions
+  const onCreateSubmit: SubmitHandler<CreateUserFormValues> = async (data) => {
     setError(null);
     setSuccess(null);
     
     try {
-      // In a real app, you would add via the API
-      const response = await apiClient.post('/users', data);
-      
-      // For now, just simulate a successful addition
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Add to local state with a mock ID
-      const newUser: User = {
-        id: Math.max(0, ...users.map(u => u.id)) + 1,
-        email: data.email,
-        is_active: true,
-        is_verified: false,
-        is_admin: data.is_admin,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      
-      // Create mock preferences
-      const newPreference: UserPreference = {
-        id: newUser.id,
-        user_id: newUser.id,
-        openai_api_key: data.openai_api_key,
-        default_model: data.default_model,
-        suggestion_count: data.suggestion_count,
-        selected_creators: null,
-      };
-      
-      setUsers([...users, newUser]);
-      setPreferences({ ...preferences, [newUser.id]: newPreference });
+      await apiClient.post('/users/', data);
       setSuccess('User created successfully. An email has been sent to the user for account setup.');
       setDialogOpen(false);
+      await fetchUsers();
+      await fetchUserStats();
     } catch (err: any) {
-      console.error('Error creating user:', err);
-      setError(err.message || 'Failed to create user');
+      setError(err.response?.data?.detail || err.message || 'Failed to create user');
     }
   };
 
-  // Handle user status toggle
-  const handleStatusToggle = async (user: User) => {
-    try {
-      // In a real app, you would update via the API
-      // await apiClient.patch(`/users/${user.id}`, { is_active: !user.is_active });
-      
-      // Update local state
-      setUsers(users.map(u => 
-        u.id === user.id 
-          ? { ...u, is_active: !u.is_active } 
-          : u
-      ));
-      
-      setSuccess(`User ${user.is_active ? 'deactivated' : 'activated'} successfully`);
-    } catch (err: any) {
-      console.error('Error updating user status:', err);
-      setError(err.message || 'Failed to update user status');
-    }
-  };
-
-  // Handle admin role toggle
-  const handleAdminToggle = async (user: User) => {
-    try {
-      // In a real app, you would update via the API
-      // await apiClient.patch(`/users/${user.id}`, { is_admin: !user.is_admin });
-      
-      // Update local state
-      setUsers(users.map(u => 
-        u.id === user.id 
-          ? { ...u, is_admin: !u.is_admin } 
-          : u
-      ));
-      
-      setSuccess(`User ${user.is_admin ? 'removed from' : 'added to'} admin role successfully`);
-    } catch (err: any) {
-      console.error('Error updating user role:', err);
-      setError(err.message || 'Failed to update user role');
-    }
-  };
-
-  // Handle password reset confirmation
-  const handleResetPasswordConfirm = async () => {
+  const onEditSubmit: SubmitHandler<EditUserFormValues> = async (data) => {
     if (!selectedUser) return;
     
+    setError(null);
+    setSuccess(null);
+    
     try {
-      // In a real app, you would call the API to reset password
-      // await apiClient.post(`/users/${selectedUser.id}/reset-password`);
-      
-      // For now, just simulate a successful reset
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      setSuccess('Password reset email sent successfully');
-      setResetPasswordDialogOpen(false);
-      setSelectedUser(null);
+      await apiClient.patch(`/users/${selectedUser.id}`, data);
+      setSuccess('User updated successfully');
+      setEditDialogOpen(false);
+      await fetchUsers();
+      await fetchUserStats();
     } catch (err: any) {
-      console.error('Error resetting password:', err);
-      setError(err.message || 'Failed to reset password');
+      setError(err.response?.data?.detail || err.message || 'Failed to update user');
+    }
+  };
+
+  const onPasswordSubmit: SubmitHandler<ResetPasswordFormValues> = async (data) => {
+    if (!selectedUser) return;
+    
+    setError(null);
+    setSuccess(null);
+    
+    try {
+      await apiClient.post(`/users/${selectedUser.id}/reset-password`, data);
+      setSuccess('Password reset successfully');
+      setResetPasswordDialogOpen(false);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to reset password');
     }
   };
 
@@ -376,22 +379,112 @@ export default function UsersPage() {
     if (!selectedUser) return;
     
     try {
-      // In a real app, you would delete via the API
-      // await apiClient.delete(`/users/${selectedUser.id}`);
-      
-      // Update local state
-      setUsers(users.filter(u => u.id !== selectedUser.id));
-      
+      await apiClient.delete(`/users/${selectedUser.id}`);
       setSuccess('User deleted successfully');
       setDeleteDialogOpen(false);
       setSelectedUser(null);
+      await fetchUsers();
+      await fetchUserStats();
     } catch (err: any) {
-      console.error('Error deleting user:', err);
-      setError(err.message || 'Failed to delete user');
+      setError(err.response?.data?.detail || err.message || 'Failed to delete user');
     }
   };
 
-  // Format date for display
+  // Handle user status toggle
+  const handleStatusToggle = async (user: User) => {
+    try {
+      if (user.is_active) {
+        await apiClient.post(`/users/${user.id}/deactivate`);
+        setSuccess(`User deactivated successfully`);
+      } else {
+        await apiClient.post(`/users/${user.id}/activate`);
+        setSuccess(`User activated successfully`);
+      }
+      await fetchUsers();
+      await fetchUserStats();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to update user status');
+    }
+  };
+
+  // Handle admin role toggle
+  const handleAdminToggle = async (user: User) => {
+    try {
+      if (user.is_admin) {
+        await apiClient.post(`/users/${user.id}/remove-admin`);
+        setSuccess(`Admin privileges removed successfully`);
+      } else {
+        await apiClient.post(`/users/${user.id}/make-admin`);
+        setSuccess(`Admin privileges granted successfully`);
+      }
+      await fetchUsers();
+      await fetchUserStats();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to update user role');
+    }
+  };
+
+  // Bulk operations
+  const handleBulkActivate = async () => {
+    if (bulkSelection.length === 0) return;
+    
+    try {
+      await apiClient.post('/users/bulk-activate', bulkSelection);
+      setSuccess(`Successfully activated ${bulkSelection.length} users`);
+      setBulkSelection([]);
+      await fetchUsers();
+      await fetchUserStats();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to activate users');
+    }
+  };
+
+  const handleBulkDeactivate = async () => {
+    if (bulkSelection.length === 0) return;
+    
+    try {
+      await apiClient.post('/users/bulk-deactivate', bulkSelection);
+      setSuccess(`Successfully deactivated ${bulkSelection.length} users`);
+      setBulkSelection([]);
+      await fetchUsers();
+      await fetchUserStats();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Failed to deactivate users');
+    }
+  };
+
+  // Export users
+  const handleExportUsers = async () => {
+    try {
+      // In a real implementation, this would download a CSV file
+      const allUsers = await apiClient.get<UsersResponse>('/users/', { 
+        params: { limit: 10000 } // Get all users
+      });
+      
+      const csvContent = [
+        'ID,Email,Status,Role,Verified,Created,Updated',
+        ...allUsers.items.map(user => 
+          `${user.id},${user.email},${user.is_active ? 'Active' : 'Inactive'},${user.is_admin ? 'Admin' : 'User'},${user.is_verified ? 'Yes' : 'No'},${user.created_at},${user.updated_at}`
+        )
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setSuccess('Users exported successfully');
+    } catch (err: any) {
+      setError(err.message || 'Failed to export users');
+    }
+  };
+
+  // Utility functions
   const formatDate = (dateString: string) => {
     try {
       return format(new Date(dateString), 'PPP');
@@ -400,14 +493,9 @@ export default function UsersPage() {
     }
   };
 
-  // Mask API key for display
   const maskApiKey = (key: string | null) => {
     if (!key) return '—';
-    
-    if (showApiKey) {
-      return key;
-    }
-    
+    if (showApiKey) return key;
     const prefix = key.slice(0, 7);
     const suffix = key.slice(-4);
     const maskedPart = '•'.repeat(10);
@@ -416,7 +504,7 @@ export default function UsersPage() {
 
   return (
     <Box>
-      {/* Success message */}
+      {/* Success/Error Messages */}
       <Snackbar
         open={!!success}
         autoHideDuration={6000}
@@ -428,13 +516,13 @@ export default function UsersPage() {
         </Alert>
       </Snackbar>
       
-      {/* Error message */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
-      
+
+      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box>
           <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
@@ -442,20 +530,117 @@ export default function UsersPage() {
           </Typography>
           <Typography variant="body1" color="text.secondary">
             Manage user accounts and permissions
+            {totalUsers > 0 && (
+              <Typography component="span" sx={{ ml: 1, fontWeight: 500 }}>
+                ({totalUsers} total)
+              </Typography>
+            )}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateUser}
-        >
-          Add User
-        </Button>
+        
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<GetAppIcon />}
+            onClick={handleExportUsers}
+            disabled={totalUsers === 0}
+          >
+            Export
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleCreateUser}
+          >
+            Add User
+          </Button>
+        </Box>
       </Box>
-      
+
+      {/* Statistics Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+          <Card sx={{ textAlign: 'center' }}>
+            <CardContent>
+              <Typography variant="h4" color="primary.main" fontWeight="bold">
+                {userStats.total_users}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Users
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+          <Card sx={{ textAlign: 'center' }}>
+            <CardContent>
+              <Typography variant="h4" color="success.main" fontWeight="bold">
+                {userStats.active_users}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Active Users
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+          <Card sx={{ textAlign: 'center' }}>
+            <CardContent>
+              <Typography variant="h4" color="warning.main" fontWeight="bold">
+                {userStats.inactive_users}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Inactive Users
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+          <Card sx={{ textAlign: 'center' }}>
+            <CardContent>
+              <Typography variant="h4" color="secondary.main" fontWeight="bold">
+                {userStats.admin_users}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Admin Users
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+          <Card sx={{ textAlign: 'center' }}>
+            <CardContent>
+              <Typography variant="h4" color="info.main" fontWeight="bold">
+                {userStats.verified_users}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Verified Users
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+          <Card sx={{ textAlign: 'center' }}>
+            <CardContent>
+              <Typography variant="h4" color="error.main" fontWeight="bold">
+                {userStats.unverified_users}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Unverified Users
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Filters and Search */}
       <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-          {/* Search field */}
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
           <TextField
             placeholder="Search users by email..."
             variant="outlined"
@@ -471,25 +656,71 @@ export default function UsersPage() {
               ),
             }}
           />
+          
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Filter</InputLabel>
+            <Select
+              value={statusFilter}
+              label="Filter"
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              startAdornment={<FilterListIcon sx={{ mr: 1 }} />}
+            >
+              <MenuItem value="all">All Users</MenuItem>
+              <MenuItem value="active">Active Only</MenuItem>
+              <MenuItem value="inactive">Inactive Only</MenuItem>
+              <MenuItem value="admin">Admins Only</MenuItem>
+            </Select>
+          </FormControl>
+          
+          {bulkSelection.length > 0 && (
+            <>
+              <Divider orientation="vertical" flexItem />
+              <Typography variant="body2" color="text.secondary">
+                {bulkSelection.length} selected
+              </Typography>
+              <Button
+                size="small"
+                onClick={handleBulkActivate}
+                startIcon={<PersonIcon />}
+              >
+                Activate
+              </Button>
+              <Button
+                size="small"
+                onClick={handleBulkDeactivate}
+                startIcon={<PersonOffIcon />}
+              >
+                Deactivate
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setBulkSelection([])}
+              >
+                Clear
+              </Button>
+            </>
+          )}
         </Box>
         
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
           </Box>
-        ) : filteredUsers.length === 0 ? (
+        ) : users.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body1" color="text.secondary" gutterBottom>
-              No users found.
+              {searchQuery || statusFilter !== 'all' ? 'No users found matching your criteria.' : 'No users found.'}
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleCreateUser}
-              sx={{ mt: 2 }}
-            >
-              Add Your First User
-            </Button>
+            {!searchQuery && statusFilter === 'all' && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleCreateUser}
+                sx={{ mt: 2 }}
+              >
+                Add Your First User
+              </Button>
+            )}
           </Box>
         ) : (
           <>
@@ -497,24 +728,42 @@ export default function UsersPage() {
               <Table sx={{ minWidth: 650 }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell><strong>Email</strong></TableCell>
+                    <TableCell padding="checkbox">
+                      {/* Bulk selection checkbox - implement if needed */}
+                    </TableCell>
+                    <TableCell><strong>User</strong></TableCell>
                     <TableCell align="center"><strong>Role</strong></TableCell>
                     <TableCell align="center"><strong>Status</strong></TableCell>
+                    <TableCell align="center"><strong>Verified</strong></TableCell>
                     <TableCell><strong>Created</strong></TableCell>
                     <TableCell align="right"><strong>Actions</strong></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedUsers.map((user) => (
-                    <TableRow key={user.id}>
+                  {users.map((user) => (
+                    <TableRow key={user.id} hover>
+                      <TableCell padding="checkbox">
+                        {/* Implement bulk selection checkbox if needed */}
+                      </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Avatar sx={{ bgcolor: user.is_admin ? 'primary.main' : 'grey.400', width: 32, height: 32 }}>
+                          <Avatar 
+                            sx={{ 
+                              bgcolor: user.is_admin ? 'primary.main' : 'grey.400', 
+                              width: 32, 
+                              height: 32 
+                            }}
+                          >
                             {user.email.charAt(0).toUpperCase()}
                           </Avatar>
-                          <Typography variant="body2">
-                            {user.email}
-                          </Typography>
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              {user.email}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              ID: {user.id}
+                            </Typography>
+                          </Box>
                         </Box>
                       </TableCell>
                       <TableCell align="center">
@@ -534,50 +783,25 @@ export default function UsersPage() {
                           sx={{ fontWeight: 500 }}
                         />
                       </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={user.is_verified ? "Verified" : "Unverified"} 
+                          color={user.is_verified ? "success" : "warning"}
+                          size="small"
+                          variant={user.is_verified ? "filled" : "outlined"}
+                          sx={{ fontWeight: 500 }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Typography variant="body2">
                           {formatDate(user.created_at)}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Tooltip title="View">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleViewUser(user)}
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Reset Password">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleResetPassword(user)}
-                          >
-                            <KeyIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title={user.is_active ? "Deactivate" : "Activate"}>
-                          <IconButton
-                            size="small"
-                            color={user.is_active ? "warning" : "success"}
-                            onClick={() => handleStatusToggle(user)}
-                          >
-                            <Switch
-                              checked={user.is_active}
-                              size="small"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleDeleteClick(user)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleMenuClick(e, user)}
+                        ></IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -588,7 +812,7 @@ export default function UsersPage() {
             <TablePagination
               rowsPerPageOptions={[5, 10, 25, 50]}
               component="div"
-              count={filteredUsers.length}
+              count={totalUsers}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
@@ -597,7 +821,70 @@ export default function UsersPage() {
           </>
         )}
       </Paper>
-      
+
+      {/* Action Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        PaperProps={{
+          sx: { minWidth: 200 }
+        }}
+      >
+        <MenuItem onClick={() => menuUser && handleViewUser(menuUser)}>
+          <ListItemIcon>
+            <VisibilityIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View Details</ListItemText>
+        </MenuItem>
+        
+        <MenuItem onClick={() => menuUser && handleEditUser(menuUser)}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit User</ListItemText>
+        </MenuItem>
+        
+        <MenuItem onClick={() => menuUser && handleResetPassword(menuUser)}>
+          <ListItemIcon>
+            <KeyIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Reset Password</ListItemText>
+        </MenuItem>
+        
+        <Divider />
+        
+        <MenuItem onClick={() => menuUser && handleStatusToggle(menuUser)}>
+          <ListItemIcon>
+            {menuUser?.is_active ? <PersonOffIcon fontSize="small" /> : <PersonIcon fontSize="small" />}
+          </ListItemIcon>
+          <ListItemText>
+            {menuUser?.is_active ? 'Deactivate' : 'Activate'}
+          </ListItemText>
+        </MenuItem>
+        
+        <MenuItem onClick={() => menuUser && handleAdminToggle(menuUser)}>
+          <ListItemIcon>
+            <SecurityIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>
+            {menuUser?.is_admin ? 'Remove Admin' : 'Make Admin'}
+          </ListItemText>
+        </MenuItem>
+        
+        <Divider />
+        
+        <MenuItem 
+          onClick={() => menuUser && handleDeleteClick(menuUser)}
+          sx={{ color: 'error.main' }}
+        >
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Delete User</ListItemText>
+        </MenuItem>
+      </Menu>
+
       {/* Create User Dialog */}
       <Dialog
         open={dialogOpen}
@@ -606,7 +893,7 @@ export default function UsersPage() {
         fullWidth
       >
         <DialogTitle>Add New User</DialogTitle>
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={createForm.handleSubmit(onCreateSubmit)}>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" paragraph>
               Create a new user account. An email will be sent to the user with instructions to set up their password.
@@ -614,7 +901,7 @@ export default function UsersPage() {
             
             <Controller
               name="email"
-              control={control}
+              control={createForm.control}
               render={({ field }) => (
                 <TextField
                   {...field}
@@ -622,29 +909,63 @@ export default function UsersPage() {
                   fullWidth
                   margin="normal"
                   variant="outlined"
-                  error={!!errors.email}
-                  helperText={errors.email?.message}
+                  error={!!createForm.formState.errors.email}
+                  helperText={createForm.formState.errors.email?.message}
                   autoComplete="email"
                 />
               )}
             />
             
-            <FormControlLabel
-              control={
-                <Controller
-                  name="is_admin"
-                  control={control}
-                  render={({ field }) => (
-                    <Switch
-                      checked={field.value}
-                      onChange={(e) => field.onChange(e.target.checked)}
-                    />
-                  )}
+            <Controller
+              name="password"
+              control={createForm.control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Password"
+                  type="password"
+                  fullWidth
+                  margin="normal"
+                  variant="outlined"
+                  error={!!createForm.formState.errors.password}
+                  helperText={createForm.formState.errors.password?.message}
                 />
-              }
-              label="Admin Privileges"
-              sx={{ mt: 2 }}
+              )}
             />
+            
+            <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+              <Controller
+                name="is_admin"
+                control={createForm.control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    }
+                    label="Admin Privileges"
+                  />
+                )}
+              />
+              
+              <Controller
+                name="is_active"
+                control={createForm.control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    }
+                    label="Active User"
+                  />
+                )}
+              />
+            </Box>
             
             <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
               Default Settings
@@ -652,7 +973,7 @@ export default function UsersPage() {
             
             <Controller
               name="openai_api_key"
-              control={control}
+              control={createForm.control}
               render={({ field }) => (
                 <TextField
                   {...field}
@@ -660,17 +981,17 @@ export default function UsersPage() {
                   fullWidth
                   margin="normal"
                   variant="outlined"
-                  error={!!errors.openai_api_key}
-                  helperText={errors.openai_api_key?.message || "If not provided, the system will use the default API key"}
+                  error={!!createForm.formState.errors.openai_api_key}
+                  helperText={createForm.formState.errors.openai_api_key?.message || "If not provided, the system will use the default API key"}
                   value={field.value || ''}
-                  onChange={(e) => field.onChange(e.target.value || null)}
+                  onChange={(e) => field.onChange(e.target.value || undefined)}
                 />
               )}
             />
             
             <Controller
               name="default_model"
-              control={control}
+              control={createForm.control}
               render={({ field }) => (
                 <FormControl fullWidth margin="normal">
                   <InputLabel id="model-select-label">Default Model</InputLabel>
@@ -691,7 +1012,7 @@ export default function UsersPage() {
             
             <Controller
               name="suggestion_count"
-              control={control}
+              control={createForm.control}
               render={({ field }) => (
                 <TextField
                   {...field}
@@ -700,8 +1021,8 @@ export default function UsersPage() {
                   fullWidth
                   margin="normal"
                   variant="outlined"
-                  error={!!errors.suggestion_count}
-                  helperText={errors.suggestion_count?.message || "Number of suggestions to generate (1-10)"}
+                  error={!!createForm.formState.errors.suggestion_count}
+                  helperText={createForm.formState.errors.suggestion_count?.message || "Number of suggestions to generate (1-10)"}
                   InputProps={{
                     inputProps: { min: 1, max: 10 }
                   }}
@@ -723,8 +1044,99 @@ export default function UsersPage() {
           </DialogActions>
         </form>
       </Dialog>
-      
-      {/* View User Dialog - FIXED: Updated Grid usage to Material-UI v7 syntax */}
+
+      {/* Edit User Dialog */}
+      <Dialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Edit User</DialogTitle>
+        <form onSubmit={editForm.handleSubmit(onEditSubmit)}>
+          <DialogContent>
+            <Controller
+              name="email"
+              control={editForm.control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Email Address"
+                  fullWidth
+                  margin="normal"
+                  variant="outlined"
+                  error={!!editForm.formState.errors.email}
+                  helperText={editForm.formState.errors.email?.message}
+                  autoComplete="email"
+                />
+              )}
+            />
+            
+            <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Controller
+                name="is_admin"
+                control={editForm.control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    }
+                    label="Admin Privileges"
+                  />
+                )}
+              />
+              
+              <Controller
+                name="is_active"
+                control={editForm.control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    }
+                    label="Active User"
+                  />
+                )}
+              />
+              
+              <Controller
+                name="is_verified"
+                control={editForm.control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    }
+                    label="Verified User"
+                  />
+                )}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+            >
+              Update User
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* View User Dialog */}
       <Dialog
         open={viewUserOpen}
         onClose={() => setViewUserOpen(false)}
@@ -750,43 +1162,52 @@ export default function UsersPage() {
                         <Typography variant="body1" fontWeight="medium">
                           {selectedUser.email}
                         </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          User ID: {selectedUser.id}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">Role</Typography>
                         <Chip 
                           label={selectedUser.is_admin ? "Admin" : "User"} 
                           color={selectedUser.is_admin ? "primary" : "default"}
                           size="small"
                           icon={selectedUser.is_admin ? <AdminPanelSettingsIcon /> : <PersonIcon />}
-                          sx={{ fontWeight: 500, mt: 1 }}
                         />
                       </Box>
-                    </Box>
-                    
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Status
-                    </Typography>
-                    <Typography variant="body1" paragraph>
-                      {selectedUser.is_active ? "Active" : "Inactive"}
-                    </Typography>
-                    
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Email Verified
-                    </Typography>
-                    <Typography variant="body1" paragraph>
-                      {selectedUser.is_verified ? "Yes" : "No"}
-                    </Typography>
-                    
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Created
-                    </Typography>
-                    <Typography variant="body1" paragraph>
-                      {formatDate(selectedUser.created_at)}
-                    </Typography>
-                    
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Last Updated
-                    </Typography>
-                    <Typography variant="body1">
-                      {formatDate(selectedUser.updated_at)}
-                    </Typography>
+                      
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">Status</Typography>
+                        <Chip 
+                          label={selectedUser.is_active ? "Active" : "Inactive"} 
+                          color={selectedUser.is_active ? "success" : "default"}
+                          size="small"
+                        />
+                      </Box>
+                      
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">Email Verified</Typography>
+                        <Chip 
+                          label={selectedUser.is_verified ? "Verified" : "Unverified"} 
+                          color={selectedUser.is_verified ? "success" : "warning"}
+                          size="small"
+                          variant={selectedUser.is_verified ? "filled" : "outlined"}
+                        />
+                      </Box>
+                      
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">Created</Typography>
+                        <Typography variant="body2">{formatDate(selectedUser.created_at)}</Typography>
+                      </Box>
+                      
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">Last Updated</Typography>
+                        <Typography variant="body2">{formatDate(selectedUser.updated_at)}</Typography>
+                      </Box>
+                    </Stack>
                   </Paper>
                 </Grid>
                 
@@ -796,100 +1217,45 @@ export default function UsersPage() {
                       Preferences
                     </Typography>
                     
-                    {selectedUser && preferences[selectedUser.id] && (
-                      <>
-                        <Typography variant="subtitle2" color="text.secondary">
-                          OpenAI API Key
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                          <Typography variant="body1" fontFamily="monospace" sx={{ wordBreak: 'break-all' }}>
-                            {maskApiKey(preferences[selectedUser.id].openai_api_key)}
-                          </Typography>
-                          <IconButton size="small" onClick={() => setShowApiKey(!showApiKey)}>
-                            {showApiKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-                          </IconButton>
+                    {selectedUser.preferences ? (
+                      <Stack spacing={2}>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">OpenAI API Key</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" fontFamily="monospace" sx={{ wordBreak: 'break-all' }}>
+                              {maskApiKey(selectedUser.preferences.openai_api_key)}
+                            </Typography>
+                            <IconButton size="small" onClick={() => setShowApiKey(!showApiKey)}>
+                              {showApiKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                            </IconButton>
+                          </Box>
                         </Box>
                         
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Default Model
-                        </Typography>
-                        <Typography variant="body1" paragraph>
-                          {preferences[selectedUser.id]?.default_model}
-                        </Typography>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Default Model</Typography>
+                          <Typography variant="body2">{selectedUser.preferences.default_model}</Typography>
+                        </Box>
                         
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Suggestion Count
-                        </Typography>
-                        <Typography variant="body1" paragraph>
-                          {preferences[selectedUser.id]?.suggestion_count}
-                        </Typography>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Suggestion Count</Typography>
+                          <Typography variant="body2">{selectedUser.preferences.suggestion_count}</Typography>
+                        </Box>
                         
-                        <Typography variant="subtitle2" color="text.secondary">
-                          Selected Creators
-                        </Typography>
-                        <Typography variant="body1">
-                          {preferences[selectedUser.id]?.selected_creators 
-                            ? `${preferences[selectedUser.id]?.selected_creators?.length || 0} creators selected`
-                            : "No creators selected"}
-                        </Typography>
-                      </>
-                    )}
-                    
-                    {!preferences[selectedUser.id] && (
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Selected Creators</Typography>
+                          <Typography variant="body2">
+                            {selectedUser.preferences.selected_creators 
+                              ? `${selectedUser.preferences.selected_creators.length} creators selected`
+                              : "No creators selected"}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    ) : (
                       <Typography variant="body1" color="text.secondary">
-                        No preferences set for this user.
+                        No preferences configured for this user.
                       </Typography>
                     )}
                   </Paper>
-                </Grid>
-                
-                <Grid size={12}>
-                  <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<KeyIcon />}
-                      onClick={() => {
-                        setViewUserOpen(false);
-                        setResetPasswordDialogOpen(true);
-                      }}
-                    >
-                      Reset Password
-                    </Button>
-                    
-                    <Button
-                      variant={selectedUser.is_active ? "outlined" : "contained"}
-                      color={selectedUser.is_active ? "warning" : "success"}
-                      onClick={() => {
-                        handleStatusToggle(selectedUser);
-                        setViewUserOpen(false);
-                      }}
-                    >
-                      {selectedUser.is_active ? "Deactivate User" : "Activate User"}
-                    </Button>
-                    
-                    <Button
-                      variant={selectedUser.is_admin ? "outlined" : "contained"}
-                      color="primary"
-                      onClick={() => {
-                        handleAdminToggle(selectedUser);
-                        setViewUserOpen(false);
-                      }}
-                    >
-                      {selectedUser.is_admin ? "Remove Admin Role" : "Make Admin"}
-                    </Button>
-                    
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => {
-                        setViewUserOpen(false);
-                        setDeleteDialogOpen(true);
-                      }}
-                    >
-                      Delete User
-                    </Button>
-                  </Box>
                 </Grid>
               </Grid>
             </DialogContent>
@@ -901,37 +1267,54 @@ export default function UsersPage() {
           </>
         )}
       </Dialog>
-      
+
       {/* Reset Password Dialog */}
       <Dialog
         open={resetPasswordDialogOpen}
         onClose={() => setResetPasswordDialogOpen(false)}
       >
         <DialogTitle>Reset Password</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {selectedUser && (
-              <>
-                Are you sure you want to reset the password for <strong>{selectedUser.email}</strong>?
-                <br /><br />
-                A password reset link will be sent to the user's email address.
-              </>
-            )}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResetPasswordDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleResetPasswordConfirm}
-            variant="contained"
-          >
-            Reset Password
-          </Button>
-        </DialogActions>
+        <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}>
+          <DialogContent>
+            <DialogContentText>
+              {selectedUser && (
+                <>
+                  Reset password for <strong>{selectedUser.email}</strong>
+                </>
+              )}
+            </DialogContentText>
+            
+            <Controller
+              name="new_password"
+              control={passwordForm.control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="New Password"
+                  type="password"
+                  fullWidth
+                  margin="normal"
+                  variant="outlined"
+                  error={!!passwordForm.formState.errors.new_password}
+                  helperText={passwordForm.formState.errors.new_password?.message}
+                />
+              )}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setResetPasswordDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+            >
+              Reset Password
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
-      
+
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
@@ -942,7 +1325,7 @@ export default function UsersPage() {
           <DialogContentText>
             {selectedUser && (
               <>
-                Are you sure you want to delete the user <strong>{selectedUser.email}</strong>?
+                Are you sure you want to delete <strong>{selectedUser.email}</strong>?
                 <br /><br />
                 This action cannot be undone. The user will no longer be able to access the system,
                 and all their preferences will be deleted.
@@ -959,10 +1342,20 @@ export default function UsersPage() {
             color="error"
             variant="contained"
           >
-            Delete
+            Delete User
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Floating Action Button */}
+      <Fab
+        color="primary"
+        aria-label="add user"
+        sx={{ position: 'fixed', bottom: 24, right: 24 }}
+        onClick={handleCreateUser}
+      >
+        <AddIcon />
+      </Fab>
     </Box>
   );
 }
