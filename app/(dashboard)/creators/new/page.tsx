@@ -1,4 +1,4 @@
-// app/(dashboard)/creators/new/page.tsx
+// app/(dashboard)/creators/new/page.tsx - Fixed legacyBehavior deprecation
 'use client';
 
 import { useState } from 'react';
@@ -151,12 +151,12 @@ export default function NewCreatorPage() {
         </Alert>
       )}
       
-      {/* Breadcrumbs navigation */}
+      {/* Breadcrumbs navigation - FIXED: Removed legacyBehavior */}
       <Breadcrumbs sx={{ mb: 2 }}>
-        <Link href="/dashboard" passHref legacyBehavior>
+        <Link href="/dashboard">
           <MuiLink color="inherit" underline="hover">Dashboard</MuiLink>
         </Link>
-        <Link href="/creators" passHref legacyBehavior>
+        <Link href="/creators">
           <MuiLink color="inherit" underline="hover">Creators</MuiLink>
         </Link>
         <Typography color="text.primary">New Creator</Typography>
