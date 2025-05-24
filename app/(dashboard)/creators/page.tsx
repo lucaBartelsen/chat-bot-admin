@@ -171,76 +171,6 @@ export default function CreatorsPage() {
       } catch (bulkError: any) {
         console.warn('⚠️ Bulk stats endpoint failed, trying individual stats...', bulkError);
         
-        // Fallback to individual stats endpoints
-        try {
-          const statsPromises = creatorsList.map(async (creator) => {
-            try {
-              const stats = await creatorsApi.getCreatorStats(creator.id);
-              return {
-                creatorId: creator.id,
-                stats: {
-                  style_examples_count: stats.style_examples_count || 0,
-                  response_examples_count: stats.response_examples_count || 0,
-                  total_examples: stats.total_examples || 0,
-                  total_requests: stats.total_requests || 0,
-                  has_style_config: stats.has_style_config || false,
-                  conversation_count: stats.conversation_count || 0,
-                }
-              };
-            } catch (individualErr) {
-              console.warn(`Individual stats failed for creator ${creator.id}, using basic counts`);
-              
-              // Final fallback: direct API calls for basic counts
-              try {
-                const [styleExamples, responseExamples] = await Promise.all([
-                  apiClient.get(`/creators/${creator.id}/style-examples`, { params: { limit: 1 } }),
-                  apiClient.get(`/creators/${creator.id}/response-examples`, { params: { limit: 1 } })
-                ]);
-                
-                const styleCount = styleExamples.total ?? styleExamples.length ?? 0;
-                const responseCount = responseExamples.total ?? responseExamples.length ?? 0;
-                
-                return {
-                  creatorId: creator.id,
-                  stats: {
-                    style_examples_count: styleCount,
-                    response_examples_count: responseCount,
-                    total_examples: styleCount + responseCount,
-                    total_requests: 0,
-                    has_style_config: false,
-                    conversation_count: 0,
-                  }
-                };
-              } catch (fallbackErr) {
-                console.error(`All stat methods failed for creator ${creator.id}`);
-                return {
-                  creatorId: creator.id,
-                  stats: {
-                    style_examples_count: 0,
-                    response_examples_count: 0,
-                    total_examples: 0,
-                    total_requests: 0,
-                    has_style_config: false,
-                    conversation_count: 0,
-                  }
-                };
-              }
-            }
-          });
-
-          const statsResults = await Promise.all(statsPromises);
-          const fallbackStatsMap: Record<number, CreatorStats> = {};
-          
-          statsResults.forEach(({ creatorId, stats }) => {
-            fallbackStatsMap[creatorId] = stats;
-          });
-          
-          console.log('✅ Individual stats loaded:', fallbackStatsMap);
-          setCreatorStats(fallbackStatsMap);
-          
-        } catch (individualError) {
-          console.error('❌ All individual stat fetching failed:', individualError);
-          
           // Set empty stats to prevent undefined errors
           const emptyStatsMap: Record<number, CreatorStats> = {};
           creatorsList.forEach(creator => {
@@ -255,7 +185,7 @@ export default function CreatorsPage() {
           });
           setCreatorStats(emptyStatsMap);
         }
-      }
+      
       
     } catch (err) {
       console.error('❌ Failed to fetch creator stats:', err);
