@@ -801,7 +801,7 @@ export default function UsersPage() {
                         <IconButton
                           size="small"
                           onClick={(e) => handleMenuClick(e, user)}
-                        ></IconButton>
+                        ><MoreVertIcon /></IconButton>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -1,4 +1,4 @@
-// lib/api.ts - Enhanced version with user management and better error handling
+// lib/api.ts - Complete enhanced version with creator statistics
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 
 // Create an axios instance
@@ -237,6 +237,44 @@ interface CreatorsResponse {
   pages: number;
 }
 
+// Enhanced Creator Stats interface
+interface CreatorStats {
+  creator_id: number;
+  creator_name: string;
+  creator_active: boolean;
+  creator_description?: string | null;
+  style_examples_count: number;
+  response_examples_count: number;
+  total_individual_responses: number;
+  total_examples: number;
+  conversation_count: number;
+  style_examples_by_category: Record<string, number>;
+  response_examples_by_category: Record<string, number>;
+  recent_examples: Array<{
+    id: number;
+    fan_message: string;
+    category: string | null;
+    created_at: string;
+  }>;
+  has_style_config: boolean;
+  created_at: string;
+  updated_at: string;
+  stats_generated_at: string;
+}
+
+interface BulkCreatorStats {
+  [creatorId: number]: {
+    creator_id: number;
+    creator_name: string;
+    creator_active: boolean;
+    style_examples_count: number;
+    response_examples_count: number;
+    total_examples: number;
+    created_at: string;
+    updated_at: string;
+  };
+}
+
 // User Management API functions
 export const usersApi = {
   // Get all users with pagination and filtering
@@ -296,7 +334,7 @@ export const usersApi = {
   bulkDeactivateUsers: (userIds: number[]) => apiClient.post('/users/bulk-deactivate', userIds),
 };
 
-// Creators API functions (existing)
+// Enhanced Creators API functions with statistics
 export const creatorsApi = {
   // Get all creators with pagination and filtering
   getCreators: (params?: {
@@ -343,8 +381,14 @@ export const creatorsApi = {
     search?: string;
   }) => apiClient.get(`/creators/${id}/response-examples`, { params }),
   
-  // Creator statistics
-  getCreatorStats: (id: number) => apiClient.get(`/creators/${id}/statistics`),
+  // NEW: Enhanced Statistics Endpoints
+  getCreatorStats: (id: number) => apiClient.get<CreatorStats>(`/creators/${id}/stats`),
+  
+  getBulkCreatorStats: (creatorIds: number[]) => 
+    apiClient.post<BulkCreatorStats>('/creators/bulk-stats', creatorIds),
+  
+  // Legacy statistics (keep for backward compatibility)
+  getCreatorStatistics: (id: number) => apiClient.get(`/creators/${id}/statistics`),
   getCreatorCategories: (id: number) => apiClient.get(`/creators/${id}/categories`),
   
   // Creator status management
@@ -481,6 +525,20 @@ export const api = {
   suggestions: suggestionsApi,
   examples: examplesApi,
   diagnostics: diagnosticsApi,
+};
+
+// Export types for use in components
+export type {
+  User,
+  UserPreference,
+  UserWithPreferences,
+  UsersResponse,
+  UserStats,
+  Creator,
+  CreatorsResponse,
+  CreatorStats,
+  BulkCreatorStats,
+  ApiError,
 };
 
 // Export the axios instance for direct use if needed

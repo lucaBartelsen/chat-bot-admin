@@ -1,4 +1,4 @@
-// app/(dashboard)/creators/page.tsx - Updated to use real API data
+// app/(dashboard)/creators/page.tsx - Complete updated version with fixed response counts
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -40,34 +40,20 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import AddIcon from '@mui/icons-material/Add';
 import GroupsIcon from '@mui/icons-material/Groups';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { apiClient } from '../../../lib/api';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import SettingsIcon from '@mui/icons-material/Settings';
+import { apiClient, creatorsApi, type Creator, type CreatorsResponse, type BulkCreatorStats } from '../../../lib/api';
 import { format } from 'date-fns';
 
-// Creator type definition from your backend
-interface Creator {
-  id: number;
-  name: string;
-  description: string | null;
-  avatar_url: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// API response type for paginated creators
-interface CreatorsResponse {
-  items: Creator[];
-  total: number;
-  page: number;
-  size: number;
-  pages: number;
-}
-
-// Stats for each creator (this would come from additional API calls or be included in the response)
+// Enhanced Creator Stats interface for frontend use
 interface CreatorStats {
   style_examples_count: number;
   response_examples_count: number;
-  total_requests?: number;
+  total_examples: number;
+  total_requests: number;
+  has_style_config: boolean;
+  conversation_count: number;
 }
 
 export default function CreatorsPage() {
@@ -77,6 +63,7 @@ export default function CreatorsPage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [creatorStats, setCreatorStats] = useState<Record<number, CreatorStats>>({});
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,7 +75,7 @@ export default function CreatorsPage() {
   const [totalCreators, setTotalCreators] = useState(0);
   const itemsPerPage = 12;
 
-  // Fetch creators from API
+  // Enhanced fetchCreators function with better error handling
   const fetchCreators = async (currentPage: number = 1, search: string = '', status: string = 'all') => {
     setLoading(true);
     setError(null);
@@ -114,8 +101,8 @@ export default function CreatorsPage() {
       
       console.log('📤 API request params:', params);
       
-      // Fetch creators from your API
-      const response = await apiClient.get<CreatorsResponse>('/creators', { params });
+      // Use the enhanced creatorsApi
+      const response = await creatorsApi.getCreators(params);
       
       console.log('✅ Creators fetched successfully:', response);
       
@@ -124,8 +111,10 @@ export default function CreatorsPage() {
       setTotalCreators(response.total || 0);
       setTotalPages(response.pages || 1);
       
-      // Fetch stats for each creator (optional - you might want to include this in the main API response)
-      await fetchCreatorStats(response.items || []);
+      // Fetch stats for the loaded creators
+      if (response.items && response.items.length > 0) {
+        await fetchCreatorStats(response.items);
+      }
       
     } catch (err: any) {
       console.error('❌ Error fetching creators:', err);
@@ -134,53 +123,157 @@ export default function CreatorsPage() {
       setCreators([]);
       setTotalCreators(0);
       setTotalPages(1);
+      setCreatorStats({});
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch additional stats for creators (if you have a stats endpoint)
+  // Enhanced fetchCreatorStats function with bulk API and fallback
   const fetchCreatorStats = async (creatorsList: Creator[]) => {
+    if (!creatorsList || creatorsList.length === 0) {
+      setCreatorStats({});
+      return;
+    }
+
+    setStatsLoading(true);
+    
     try {
-      const statsPromises = creatorsList.map(async (creator) => {
+      console.log('📊 Fetching creator statistics...');
+      
+      const creatorIds = creatorsList.map(c => c.id);
+      console.log('📊 Fetching stats for creators:', creatorIds);
+      
+      // Try bulk stats endpoint first (most efficient)
+      try {
+        const bulkStats = await creatorsApi.getBulkCreatorStats(creatorIds);
+        console.log('✅ Bulk stats received:', bulkStats);
+        
+        const statsMap: Record<number, CreatorStats> = {};
+        
+        // Convert API response to our CreatorStats format
+        Object.entries(bulkStats).forEach(([creatorId, stats]: [string, any]) => {
+          const id = parseInt(creatorId);
+          statsMap[id] = {
+            style_examples_count: stats.style_examples_count || 0,
+            response_examples_count: stats.response_examples_count || 0, // Now correctly fetched!
+            total_examples: stats.total_examples || (stats.style_examples_count + stats.response_examples_count),
+            total_requests: stats.total_requests || 0,
+            has_style_config: stats.has_style_config,
+            conversation_count: stats.conversation_count || 0,
+          };
+        });
+        
+        console.log('✅ Creator stats processed:', statsMap);
+        setCreatorStats(statsMap);
+        return;
+        
+      } catch (bulkError: any) {
+        console.warn('⚠️ Bulk stats endpoint failed, trying individual stats...', bulkError);
+        
+        // Fallback to individual stats endpoints
         try {
-          // You can implement a stats endpoint like /creators/{id}/stats
-          // For now, we'll fetch style examples count as an example
-          const styleExamples = await apiClient.get(`/creators/${creator.id}/style-examples`, {
-            params: { limit: 1 }
+          const statsPromises = creatorsList.map(async (creator) => {
+            try {
+              const stats = await creatorsApi.getCreatorStats(creator.id);
+              return {
+                creatorId: creator.id,
+                stats: {
+                  style_examples_count: stats.style_examples_count || 0,
+                  response_examples_count: stats.response_examples_count || 0,
+                  total_examples: stats.total_examples || 0,
+                  total_requests: stats.total_requests || 0,
+                  has_style_config: stats.has_style_config || false,
+                  conversation_count: stats.conversation_count || 0,
+                }
+              };
+            } catch (individualErr) {
+              console.warn(`Individual stats failed for creator ${creator.id}, using basic counts`);
+              
+              // Final fallback: direct API calls for basic counts
+              try {
+                const [styleExamples, responseExamples] = await Promise.all([
+                  apiClient.get(`/creators/${creator.id}/style-examples`, { params: { limit: 1 } }),
+                  apiClient.get(`/creators/${creator.id}/response-examples`, { params: { limit: 1 } })
+                ]);
+                
+                const styleCount = styleExamples.total ?? styleExamples.length ?? 0;
+                const responseCount = responseExamples.total ?? responseExamples.length ?? 0;
+                
+                return {
+                  creatorId: creator.id,
+                  stats: {
+                    style_examples_count: styleCount,
+                    response_examples_count: responseCount,
+                    total_examples: styleCount + responseCount,
+                    total_requests: 0,
+                    has_style_config: false,
+                    conversation_count: 0,
+                  }
+                };
+              } catch (fallbackErr) {
+                console.error(`All stat methods failed for creator ${creator.id}`);
+                return {
+                  creatorId: creator.id,
+                  stats: {
+                    style_examples_count: 0,
+                    response_examples_count: 0,
+                    total_examples: 0,
+                    total_requests: 0,
+                    has_style_config: false,
+                    conversation_count: 0,
+                  }
+                };
+              }
+            }
+          });
+
+          const statsResults = await Promise.all(statsPromises);
+          const fallbackStatsMap: Record<number, CreatorStats> = {};
+          
+          statsResults.forEach(({ creatorId, stats }) => {
+            fallbackStatsMap[creatorId] = stats;
           });
           
-          return {
-            creatorId: creator.id,
-            stats: {
-              style_examples_count: styleExamples.total || 0,
-              response_examples_count: 0, // You can fetch this similarly
-              total_requests: 0, // This would come from analytics
-            }
-          };
-        } catch (err) {
-          console.warn(`Failed to fetch stats for creator ${creator.id}:`, err);
-          return {
-            creatorId: creator.id,
-            stats: {
+          console.log('✅ Individual stats loaded:', fallbackStatsMap);
+          setCreatorStats(fallbackStatsMap);
+          
+        } catch (individualError) {
+          console.error('❌ All individual stat fetching failed:', individualError);
+          
+          // Set empty stats to prevent undefined errors
+          const emptyStatsMap: Record<number, CreatorStats> = {};
+          creatorsList.forEach(creator => {
+            emptyStatsMap[creator.id] = {
               style_examples_count: 0,
               response_examples_count: 0,
+              total_examples: 0,
               total_requests: 0,
-            }
-          };
+              has_style_config: false,
+              conversation_count: 0,
+            };
+          });
+          setCreatorStats(emptyStatsMap);
         }
-      });
-
-      const statsResults = await Promise.all(statsPromises);
-      const statsMap: Record<number, CreatorStats> = {};
+      }
       
-      statsResults.forEach(({ creatorId, stats }) => {
-        statsMap[creatorId] = stats;
-      });
-      
-      setCreatorStats(statsMap);
     } catch (err) {
-      console.warn('Failed to fetch creator stats:', err);
+      console.error('❌ Failed to fetch creator stats:', err);
+      // Set empty stats as final fallback
+      const emptyStatsMap: Record<number, CreatorStats> = {};
+      creatorsList.forEach(creator => {
+        emptyStatsMap[creator.id] = {
+          style_examples_count: 0,
+          response_examples_count: 0,
+          total_examples: 0,
+          total_requests: 0,
+          has_style_config: false,
+          conversation_count: 0,
+        };
+      });
+      setCreatorStats(emptyStatsMap);
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -231,7 +324,7 @@ export default function CreatorsPage() {
       setLoading(true);
       console.log('🗑️ Deleting creator:', selectedCreator.id);
       
-      await apiClient.delete(`/creators/${selectedCreator.id}`);
+      await creatorsApi.deleteCreator(selectedCreator.id);
       
       setSuccess(`Creator "${selectedCreator.name}" deleted successfully`);
       setDeleteDialogOpen(false);
@@ -261,6 +354,62 @@ export default function CreatorsPage() {
   // Handle add new creator click
   const handleAddClick = () => {
     router.push('/creators/new');
+  };
+
+  // Handle stats refresh
+  const handleRefreshStats = async () => {
+    if (creators.length > 0) {
+      await fetchCreatorStats(creators);
+    }
+  };
+
+  // Handle export of creators
+  const handleExportCreators = async () => {
+    try {
+      // Create CSV content from current creators and their stats
+      const headers = ['ID', 'Name', 'Description', 'Status', 'Style Examples', 'Response Examples', 'Total Examples', 'Has Config', 'Created', 'Updated'];
+      const rows = creators.map(creator => {
+        const stats = creatorStats[creator.id] || {
+          style_examples_count: 0,
+          response_examples_count: 0,
+          total_examples: 0,
+          has_style_config: false,
+        };
+        return [
+          creator.id.toString(),
+          `"${creator.name.replace(/"/g, '""')}"`,
+          `"${(creator.description || '').replace(/"/g, '""')}"`,
+          creator.is_active ? 'Active' : 'Inactive',
+          stats.style_examples_count.toString(),
+          stats.response_examples_count.toString(),
+          stats.total_examples.toString(),
+          stats.has_style_config ? 'Yes' : 'No',
+          formatDate(creator.created_at),
+          formatDate(creator.updated_at)
+        ];
+      });
+      
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
+      
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `creators_export_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setSuccess('Creators exported successfully');
+    } catch (err: any) {
+      console.error('❌ Error exporting creators:', err);
+      setError(err.message || 'Failed to export creators');
+    }
   };
 
   // Format date for display
@@ -299,9 +448,23 @@ export default function CreatorsPage() {
         </Alert>
       </Snackbar>
 
-      {/* Error message */}
+      {/* Error message with retry functionality */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }} 
+          onClose={() => setError(null)}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => fetchCreators(page, searchQuery, statusFilter)}
+              disabled={loading}
+            >
+              Retry
+            </Button>
+          }
+        >
           {error}
         </Alert>
       )}
@@ -362,6 +525,25 @@ export default function CreatorsPage() {
             <MenuItem value="inactive">Inactive Only</MenuItem>
           </Select>
         </FormControl>
+
+        <Button
+          variant="outlined"
+          startIcon={<GetAppIcon />}
+          onClick={handleExportCreators}
+          disabled={creators.length === 0}
+        >
+          Export
+        </Button>
+
+        <Button
+          variant="outlined"
+          startIcon={statsLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
+          onClick={handleRefreshStats}
+          disabled={statsLoading || creators.length === 0}
+          sx={{ minWidth: 120 }}
+        >
+          {statsLoading ? 'Loading...' : 'Refresh Stats'}
+        </Button>
       </Box>
 
       {loading ? (
@@ -478,27 +660,69 @@ export default function CreatorsPage() {
                       {creator.description || 'No description provided.'}
                     </Typography>
                     
-                    {/* Stats chips */}
-                    <Box 
-                      sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        gap: 1, 
-                        mt: 2,
-                        flexWrap: 'wrap', 
-                      }}
-                    >
-                      <Chip
-                        size="small"
-                        label={`${creatorStats[creator.id]?.style_examples_count || 0} Examples`}
-                        variant="outlined"
-                      />
-                      <Chip
-                        size="small"
-                        label={`${creatorStats[creator.id]?.response_examples_count || 0} Responses`}
-                        variant="outlined"
-                      />
-                    </Box>
+                    {/* Enhanced Stats chips with tooltips and better display */}
+                    {statsLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                        <CircularProgress size={16} />
+                      </Box>
+                    ) : (
+                      <Box 
+                        sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'center', 
+                          gap: 1, 
+                          mt: 2,
+                          flexWrap: 'wrap', 
+                        }}
+                      >
+                        <Tooltip title="Style Examples - Training examples for writing style">
+                          <Chip
+                            size="small"
+                            label={`${creatorStats[creator.id]?.style_examples_count || 0} Style`}
+                            variant="outlined"
+                            color="primary"
+                            sx={{ fontWeight: 500 }}
+                          />
+                        </Tooltip>
+                        
+                        <Tooltip title="Response Examples - Multiple response options for similar messages">
+                          <Chip
+                            size="small"
+                            label={`${creatorStats[creator.id]?.response_examples_count || 0} Response`}
+                            variant="outlined"
+                            color="secondary"
+                            sx={{ fontWeight: 500 }}
+                          />
+                        </Tooltip>
+                        
+                        {/* Show total if there are examples */}
+                        {(creatorStats[creator.id]?.total_examples || 0) > 0 && (
+                          <Tooltip title="Total Examples">
+                            <Chip
+                              size="small"
+                              label={`${creatorStats[creator.id]?.total_examples} Total`}
+                              variant="filled"
+                              color="default"
+                              sx={{ fontWeight: 500, opacity: 0.8 }}
+                            />
+                          </Tooltip>
+                        )}
+                        
+                        {/* Show style config indicator */}
+                        {creatorStats[creator.id]?.has_style_config && (
+                          <Tooltip title="Has Style Configuration">
+                            <Chip
+                              size="small"
+                              label="Configured"
+                              variant="filled"
+                              color="success"
+                              icon={<SettingsIcon />}
+                              sx={{ fontWeight: 500 }}
+                            />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    )}
                     
                     {/* Created date */}
                     <Typography 
