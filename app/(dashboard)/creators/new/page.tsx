@@ -151,14 +151,14 @@ export default function NewCreatorPage() {
         </Alert>
       )}
       
-      {/* Breadcrumbs navigation - FIXED: Removed legacyBehavior */}
+      {/* Breadcrumbs navigation - FIXED: Proper Link integration */}
       <Breadcrumbs sx={{ mb: 2 }}>
-        <Link href="/dashboard">
-          <MuiLink color="inherit" underline="hover">Dashboard</MuiLink>
-        </Link>
-        <Link href="/creators">
-          <MuiLink color="inherit" underline="hover">Creators</MuiLink>
-        </Link>
+        <MuiLink component={Link} href="/dashboard" color="inherit" underline="hover">
+          Dashboard
+        </MuiLink>
+        <MuiLink component={Link} href="/creators" color="inherit" underline="hover">
+          Creators
+        </MuiLink>
         <Typography color="text.primary">New Creator</Typography>
       </Breadcrumbs>
 
