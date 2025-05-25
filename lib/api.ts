@@ -277,6 +277,54 @@ interface BulkCreatorStats {
   };
 }
 
+interface DashboardStats {
+  total_creators: number;
+  active_creators: number;
+  total_style_examples: number;
+  total_response_examples: number;
+  total_requests: number;
+  success_rate: number;
+  recent_activity: ActivityItem[];
+}
+
+interface ActivityItem {
+  id: string;
+  action: string;
+  user_email: string;
+  timestamp: string;
+  details?: string;
+}
+
+interface ApiUsageMetrics {
+  date: string;
+  requests: number;
+  success_count: number;
+  error_count: number;
+  avg_response_time: number;
+}
+
+// Enhanced dashboard API functions
+export const dashboardApi = {
+  // Get comprehensive dashboard statistics
+  getDashboardStats: () => apiClient.get<DashboardStats>('/dashboard/stats'),
+  
+  // Get API usage metrics for a date range
+  getApiUsageMetrics: (params?: {
+    start_date?: string;
+    end_date?: string;
+    period?: 'day' | 'week' | 'month';
+  }) => apiClient.get<ApiUsageMetrics[]>('/dashboard/api-usage', { params }),
+  
+  // Get system health information
+  getSystemHealth: () => apiClient.get('/dashboard/health'),
+  
+  // Get recent activity logs
+  getRecentActivity: (params?: {
+    limit?: number;
+    offset?: number;
+  }) => apiClient.get<ActivityItem[]>('/dashboard/activity', { params }),
+};
+
 // User Management API functions
 export const usersApi = {
   // Get all users with pagination and filtering
@@ -448,6 +496,25 @@ export const suggestionsApi = {
   }) => apiClient.post('/suggestions/store-feedback', data),
 };
 
+// Enhanced suggestions API with more statistics
+export const enhancedSuggestionsApi = {
+  ...suggestionsApi, // Extend existing suggestionsApi
+  
+  // Get detailed statistics
+  getDetailedStats: () => apiClient.get('/suggestions/stats/detailed'),
+  
+  // Get usage analytics
+  getUsageAnalytics: (params?: {
+    start_date?: string;
+    end_date?: string;
+    creator_id?: number;
+  }) => apiClient.get('/suggestions/analytics', { params }),
+  
+  // Get performance metrics
+  getPerformanceMetrics: () => apiClient.get('/suggestions/performance'),
+};
+
+
 // Examples API functions (style and response examples)
 export const examplesApi = {
   // Style Examples
@@ -524,13 +591,17 @@ export const api = {
   users: usersApi,
   creators: creatorsApi,
   auth: authApi,
-  suggestions: suggestionsApi,
+  dashboard: dashboardApi,
+  suggestions: enhancedSuggestionsApi,
   examples: examplesApi,
   diagnostics: diagnosticsApi,
 };
 
 // Export types for use in components
 export type {
+  DashboardStats,
+  ActivityItem,
+  ApiUsageMetrics,
   User,
   UserPreference,
   UserWithPreferences,
