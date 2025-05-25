@@ -248,6 +248,7 @@ interface CreatorStats {
   total_individual_responses: number;
   total_examples: number;
   conversation_count: number;
+  total_requests: number; // ADDED: This was missing
   style_examples_by_category: Record<string, number>;
   response_examples_by_category: Record<string, number>;
   recent_examples: Array<{
@@ -270,6 +271,7 @@ interface BulkCreatorStats {
     style_examples_count: number;
     response_examples_count: number;
     total_examples: number;
+    total_requests: number; // ADDED: This was missing here too
     created_at: string;
     updated_at: string;
   };

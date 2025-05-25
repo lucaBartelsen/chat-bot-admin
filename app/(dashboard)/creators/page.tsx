@@ -1,7 +1,7 @@
 // app/(dashboard)/creators/page.tsx - Complete updated version with fixed response counts
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -43,18 +43,8 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { apiClient, creatorsApi, type Creator, type CreatorsResponse, type BulkCreatorStats } from '../../../lib/api';
+import { apiClient, creatorsApi, type Creator, type CreatorsResponse, type BulkCreatorStats, CreatorStats } from '../../../lib/api';
 import { format } from 'date-fns';
-
-// Enhanced Creator Stats interface for frontend use
-interface CreatorStats {
-  style_examples_count: number;
-  response_examples_count: number;
-  total_examples: number;
-  total_requests: number;
-  has_style_config: boolean;
-  conversation_count: number;
-}
 
 export default function CreatorsPage() {
   const router = useRouter();
@@ -75,43 +65,52 @@ export default function CreatorsPage() {
   const [totalCreators, setTotalCreators] = useState(0);
   const itemsPerPage = 12;
 
-  // Enhanced fetchCreators function with better error handling
+  // Add refs to track state and prevent unnecessary calls
+  const isInitialMount = useRef(true);
+  const searchTimeoutRef = useRef<number | null>(null);
+  const lastFetchParams = useRef<{page: number, search: string, status: string} | null>(null);
+
+  // Enhanced fetchCreators function with duplicate call prevention
   const fetchCreators = async (currentPage: number = 1, search: string = '', status: string = 'all') => {
+    // Prevent duplicate calls with same parameters
+    const currentParams = {page: currentPage, search, status};
+    if (lastFetchParams.current && 
+        lastFetchParams.current.page === currentParams.page &&
+        lastFetchParams.current.search === currentParams.search &&
+        lastFetchParams.current.status === currentParams.status) {
+      console.log('🚫 Skipping duplicate API call with same parameters');
+      return;
+    }
+    
+    lastFetchParams.current = currentParams;
     setLoading(true);
     setError(null);
     
     try {
       console.log('🔄 Fetching creators from API...');
       
-      // Build query parameters
       const params: any = {
         skip: (currentPage - 1) * itemsPerPage,
         limit: itemsPerPage,
       };
       
-      // Add search if provided
       if (search.trim()) {
         params.search = search.trim();
       }
       
-      // Add status filter if not 'all'
       if (status !== 'all') {
         params.is_active = status === 'active';
       }
       
       console.log('📤 API request params:', params);
       
-      // Use the enhanced creatorsApi
       const response = await creatorsApi.getCreators(params);
-      
       console.log('✅ Creators fetched successfully:', response);
       
-      // Update state with real data
       setCreators(response.items || []);
       setTotalCreators(response.total || 0);
       setTotalPages(response.pages || 1);
       
-      // Fetch stats for the loaded creators
       if (response.items && response.items.length > 0) {
         await fetchCreatorStats(response.items);
       }
@@ -119,7 +118,6 @@ export default function CreatorsPage() {
     } catch (err: any) {
       console.error('❌ Error fetching creators:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to load creators');
-      // Set empty state on error
       setCreators([]);
       setTotalCreators(0);
       setTotalPages(1);
@@ -129,7 +127,53 @@ export default function CreatorsPage() {
     }
   };
 
-  // Enhanced fetchCreatorStats function with bulk API and fallback
+  // Effect for initial load only
+  useEffect(() => {
+    if (isInitialMount.current) {
+      console.log('🚀 Initial mount - fetching creators');
+      fetchCreators(page, searchQuery, statusFilter);
+      isInitialMount.current = false;
+    }
+  }, []); // Empty dependency array - runs only on mount
+
+  // Effect for page changes (immediate)
+  useEffect(() => {
+    if (!isInitialMount.current) {
+      console.log('📄 Page changed - fetching creators');
+      fetchCreators(page, searchQuery, statusFilter);
+    }
+  }, [page]); // Only page changes
+
+  // Effect for search/filter changes (debounced)
+  useEffect(() => {
+    if (!isInitialMount.current) {
+      // Clear any existing timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      // Debounce search/filter changes
+      searchTimeoutRef.current = window.setTimeout(() => {
+        console.log('🔍 Search/filter changed - fetching creators after debounce');
+        // Reset to page 1 when searching/filtering
+        if (page !== 1) {
+          setPage(1); // This will trigger the page effect
+        } else {
+          fetchCreators(1, searchQuery, statusFilter);
+        }
+      }, 500);
+
+      // Cleanup function
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+          searchTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [searchQuery, statusFilter]); // Only search and filter changes
+
+  // Enhanced fetchCreatorStats function (same as before)
   const fetchCreatorStats = async (creatorsList: Creator[]) => {
     if (!creatorsList || creatorsList.length === 0) {
       setCreatorStats({});
@@ -144,23 +188,33 @@ export default function CreatorsPage() {
       const creatorIds = creatorsList.map(c => c.id);
       console.log('📊 Fetching stats for creators:', creatorIds);
       
-      // Try bulk stats endpoint first (most efficient)
       try {
         const bulkStats = await creatorsApi.getBulkCreatorStats(creatorIds);
         console.log('✅ Bulk stats received:', bulkStats);
         
         const statsMap: Record<number, CreatorStats> = {};
         
-        // Convert API response to our CreatorStats format
         Object.entries(bulkStats).forEach(([creatorId, stats]: [string, any]) => {
           const id = parseInt(creatorId);
+          const creator = creatorsList.find(c => c.id === id);
           statsMap[id] = {
+            creator_id: id,
+            creator_name: stats.creator_name || creator?.name || '',
+            creator_active: stats.creator_active ?? creator?.is_active ?? false,
+            creator_description: stats.creator_description || creator?.description || null,
             style_examples_count: stats.style_examples_count || 0,
-            response_examples_count: stats.response_examples_count || 0, // Now correctly fetched!
+            response_examples_count: stats.response_examples_count || 0,
+            total_individual_responses: stats.total_individual_responses || 0,
             total_examples: stats.total_examples || (stats.style_examples_count + stats.response_examples_count),
-            total_requests: stats.total_requests || 0,
-            has_style_config: stats.has_style_config,
             conversation_count: stats.conversation_count || 0,
+            total_requests: stats.total_requests || 0,
+            style_examples_by_category: stats.style_examples_by_category || {},
+            response_examples_by_category: stats.response_examples_by_category || {},
+            recent_examples: stats.recent_examples || [],
+            has_style_config: stats.has_style_config || false,
+            created_at: stats.created_at || creator?.created_at || '',
+            updated_at: stats.updated_at || creator?.updated_at || '',
+            stats_generated_at: stats.stats_generated_at || new Date().toISOString(),
           };
         });
         
@@ -169,36 +223,55 @@ export default function CreatorsPage() {
         return;
         
       } catch (bulkError: any) {
-        console.warn('⚠️ Bulk stats endpoint failed, trying individual stats...', bulkError);
+        console.warn('⚠️ Bulk stats endpoint failed, setting empty stats...', bulkError);
         
-          // Set empty stats to prevent undefined errors
-          const emptyStatsMap: Record<number, CreatorStats> = {};
-          creatorsList.forEach(creator => {
-            emptyStatsMap[creator.id] = {
-              style_examples_count: 0,
-              response_examples_count: 0,
-              total_examples: 0,
-              total_requests: 0,
-              has_style_config: false,
-              conversation_count: 0,
-            };
-          });
-          setCreatorStats(emptyStatsMap);
-        }
-      
+        const emptyStatsMap: Record<number, CreatorStats> = {};
+        creatorsList.forEach(creator => {
+          emptyStatsMap[creator.id] = {
+            creator_id: creator.id,
+            creator_name: creator.name,
+            creator_active: creator.is_active,
+            creator_description: creator.description,
+            style_examples_count: 0,
+            response_examples_count: 0,
+            total_individual_responses: 0,
+            total_examples: 0,
+            conversation_count: 0,
+            total_requests: 0, // ADDED: Include total_requests
+            style_examples_by_category: {},
+            response_examples_by_category: {},
+            recent_examples: [],
+            has_style_config: false,
+            created_at: creator.created_at,
+            updated_at: creator.updated_at,
+            stats_generated_at: new Date().toISOString(),
+          };
+        });
+        setCreatorStats(emptyStatsMap);
+      }
       
     } catch (err) {
       console.error('❌ Failed to fetch creator stats:', err);
-      // Set empty stats as final fallback
       const emptyStatsMap: Record<number, CreatorStats> = {};
       creatorsList.forEach(creator => {
         emptyStatsMap[creator.id] = {
+          creator_id: creator.id,
+          creator_name: creator.name,
+          creator_active: creator.is_active,
+          creator_description: creator.description,
           style_examples_count: 0,
           response_examples_count: 0,
+          total_individual_responses: 0,
           total_examples: 0,
-          total_requests: 0,
-          has_style_config: false,
           conversation_count: 0,
+          total_requests: 0, // ADDED: Include total_requests
+          style_examples_by_category: {},
+          response_examples_by_category: {},
+          recent_examples: [],
+          has_style_config: false,
+          created_at: creator.created_at,
+          updated_at: creator.updated_at,
+          stats_generated_at: new Date().toISOString(),
         };
       });
       setCreatorStats(emptyStatsMap);
@@ -207,46 +280,30 @@ export default function CreatorsPage() {
     }
   };
 
-  // Initial data fetch
-  useEffect(() => {
-    fetchCreators(page, searchQuery, statusFilter);
-  }, [page]); // Only re-fetch when page changes
-
-  // Handle search with debouncing
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (page === 1) {
-        fetchCreators(1, searchQuery, statusFilter);
-      } else {
-        setPage(1); // This will trigger the effect above
-      }
-    }, 500); // 500ms debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery, statusFilter]);
-
-  // Handle search input change
+  // Handle search input change - FIXED: No immediate API call
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
+    // The useEffect will handle the API call with debouncing
   };
 
-  // Handle status filter change
+  // Handle status filter change - FIXED: No immediate API call
   const handleStatusFilterChange = (event: any) => {
     setStatusFilter(event.target.value);
+    // The useEffect will handle the API call
   };
 
-  // Handle page change
+  // Handle page change - FIXED: Reset to page 1 if searching/filtering
   const handlePageChange = (event: React.ChangeEvent<unknown>, value: number) => {
     setPage(value);
+    // The useEffect will handle the API call
   };
 
-  // Handle delete button click
+  // Rest of your component methods remain the same...
   const handleDeleteClick = (creator: Creator) => {
     setSelectedCreator(creator);
     setDeleteDialogOpen(true);
   };
 
-  // Handle actual delete
   const handleDeleteConfirm = async () => {
     if (!selectedCreator) return;
     
@@ -271,49 +328,38 @@ export default function CreatorsPage() {
     }
   };
 
-  // Handle view button click
   const handleViewClick = (creatorId: number) => {
     router.push(`/creators/${creatorId}`);
   };
 
-  // Handle edit button click
   const handleEditClick = (creatorId: number) => {
     router.push(`/creators/${creatorId}/edit`);
   };
 
-  // Handle add new creator click
   const handleAddClick = () => {
     router.push('/creators/new');
   };
 
-  // Handle stats refresh
   const handleRefreshStats = async () => {
     if (creators.length > 0) {
       await fetchCreatorStats(creators);
     }
   };
 
-  // Handle export of creators
   const handleExportCreators = async () => {
     try {
-      // Create CSV content from current creators and their stats
       const headers = ['ID', 'Name', 'Description', 'Status', 'Style Examples', 'Response Examples', 'Total Examples', 'Has Config', 'Created', 'Updated'];
       const rows = creators.map(creator => {
-        const stats = creatorStats[creator.id] || {
-          style_examples_count: 0,
-          response_examples_count: 0,
-          total_examples: 0,
-          has_style_config: false,
-        };
+        const stats = creatorStats[creator.id];
         return [
           creator.id.toString(),
           `"${creator.name.replace(/"/g, '""')}"`,
           `"${(creator.description || '').replace(/"/g, '""')}"`,
           creator.is_active ? 'Active' : 'Inactive',
-          stats.style_examples_count.toString(),
-          stats.response_examples_count.toString(),
-          stats.total_examples.toString(),
-          stats.has_style_config ? 'Yes' : 'No',
+          stats?.style_examples_count?.toString() || '0',
+          stats?.response_examples_count?.toString() || '0',
+          stats?.total_examples?.toString() || '0',
+          stats?.has_style_config ? 'Yes' : 'No',
           formatDate(creator.created_at),
           formatDate(creator.updated_at)
         ];
@@ -324,7 +370,6 @@ export default function CreatorsPage() {
         ...rows.map(row => row.join(','))
       ].join('\n');
       
-      // Create blob and download
       const blob = new Blob([csvContent], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -342,7 +387,6 @@ export default function CreatorsPage() {
     }
   };
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     try {
       return format(new Date(dateString), 'PPP');
@@ -351,7 +395,6 @@ export default function CreatorsPage() {
     }
   };
 
-  // Filter creators locally (for real-time filtering feedback)
   const filteredCreators = creators.filter((creator) => {
     const matchesSearch = searchQuery === '' || 
       creator.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

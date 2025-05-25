@@ -1,7 +1,7 @@
-// app/(dashboard)/users/page.tsx - Enhanced Users Management
+// app/(dashboard)/users/page.tsx - Part 1: Main Component and Logic
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Typography, 
@@ -38,10 +38,8 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
   Divider,
   Stack,
-  Badge,
   Menu,
   ListItemIcon,
   ListItemText,
@@ -64,40 +62,9 @@ import PersonOffIcon from '@mui/icons-material/PersonOff';
 import SecurityIcon from '@mui/icons-material/Security';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import GetAppIcon from '@mui/icons-material/GetApp';
-import { apiClient } from '../../../lib/api';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { usersApi, type User, type UserWithPreferences, type UsersResponse, type UserStats } from '../../../lib/api';
 import { format } from 'date-fns';
-
-// Enhanced interfaces
-interface User {
-  id: number;
-  email: string;
-  is_active: boolean;
-  is_verified: boolean;
-  is_admin: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface UserPreference {
-  id: number;
-  user_id: number;
-  openai_api_key: string | null;
-  default_model: string;
-  suggestion_count: number;
-  selected_creators: number[] | null;
-}
-
-interface UserWithPreferences extends User {
-  preferences?: UserPreference;
-}
-
-interface UsersResponse {
-  items: User[];
-  total: number;
-  page: number;
-  size: number;
-  pages: number;
-}
 
 // Enhanced form validation schemas
 const createUserSchema = z.object({
@@ -132,6 +99,7 @@ export default function UsersPage() {
   // State management
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -149,7 +117,7 @@ export default function UsersPage() {
   const [menuUser, setMenuUser] = useState<User | null>(null);
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [userStats, setUserStats] = useState({
+  const [userStats, setUserStats] = useState<UserStats>({
     total_users: 0,
     active_users: 0,
     inactive_users: 0,
@@ -158,6 +126,11 @@ export default function UsersPage() {
     unverified_users: 0,
   });
   const [bulkSelection, setBulkSelection] = useState<number[]>([]);
+
+  // Add refs to track state and prevent unnecessary calls
+  const isInitialMount = useRef(true);
+  const searchTimeoutRef = useRef<number | null>(null);
+  const lastFetchParams = useRef<{page: number, search: string, status: string} | null>(null);
 
   // Forms
   const createForm = useForm<CreateUserFormValues>({
@@ -184,37 +157,54 @@ export default function UsersPage() {
     },
   });
 
-  // Fetch users from API
-  const fetchUsers = async () => {
+  // Enhanced fetchUsers function with duplicate call prevention
+  const fetchUsers = async (currentPage: number = 0, search: string = '', status: string = 'all') => {
+    // Prevent duplicate calls with same parameters
+    const currentParams = {page: currentPage, search, status};
+    if (lastFetchParams.current && 
+        lastFetchParams.current.page === currentParams.page &&
+        lastFetchParams.current.search === currentParams.search &&
+        lastFetchParams.current.status === currentParams.status) {
+      console.log('🚫 Skipping duplicate API call with same parameters');
+      return;
+    }
+    
+    lastFetchParams.current = currentParams;
     setLoading(true);
     setError(null);
     
     try {
+      console.log('🔄 Fetching users from API...');
+      
       const params: any = {
-        skip: page * rowsPerPage,
+        skip: currentPage * rowsPerPage,
         limit: rowsPerPage,
       };
       
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
+      if (search.trim()) {
+        params.search = search.trim();
       }
       
-      if (statusFilter === 'active') {
+      if (status === 'active') {
         params.is_active = true;
-      } else if (statusFilter === 'inactive') {
+      } else if (status === 'inactive') {
         params.is_active = false;
-      } else if (statusFilter === 'admin') {
+      } else if (status === 'admin') {
         params.is_admin = true;
       }
       
-      const response = await apiClient.get<UsersResponse>('/users/', { params });
+      console.log('📤 API request params:', params);
+      
+      const response = await usersApi.getUsers(params);
+      
+      console.log('✅ Users fetched successfully:', response);
       
       setUsers(response.items || []);
       setTotalUsers(response.total || 0);
       setTotalPages(response.pages || 1);
       
     } catch (err: any) {
-      console.error('Error fetching users:', err);
+      console.error('❌ Error fetching users:', err);
       setError(err.response?.data?.detail || err.message || 'Failed to load users');
       setUsers([]);
       setTotalUsers(0);
@@ -226,32 +216,74 @@ export default function UsersPage() {
 
   // Fetch user statistics
   const fetchUserStats = async () => {
+    setStatsLoading(true);
     try {
-      const stats = await apiClient.get('/users/stats/summary');
+      console.log('📊 Fetching user statistics...');
+      const stats = await usersApi.getUserStats();
+      console.log('✅ User stats fetched:', stats);
       setUserStats(stats);
     } catch (err) {
-      console.warn('Failed to fetch user stats:', err);
+      console.warn('⚠️ Failed to fetch user stats:', err);
+      // Set default stats on error
+      setUserStats({
+        total_users: 0,
+        active_users: 0,
+        inactive_users: 0,
+        admin_users: 0,
+        verified_users: 0,
+        unverified_users: 0,
+      });
+    } finally {
+      setStatsLoading(false);
     }
   };
 
-  // Initial data fetch
+  // Effect for initial load only
   useEffect(() => {
-    fetchUsers();
-    fetchUserStats();
-  }, [page, rowsPerPage]);
+    if (isInitialMount.current) {
+      console.log('🚀 Initial mount - fetching users and stats');
+      fetchUsers(page, searchQuery, statusFilter);
+      fetchUserStats();
+      isInitialMount.current = false;
+    }
+  }, []); // Empty dependency array - runs only on mount
 
-  // Handle search with debouncing
+  // Effect for page changes (immediate)
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (page === 0) {
-        fetchUsers();
-      } else {
-        setPage(0); // This will trigger fetchUsers via the effect above
+    if (!isInitialMount.current) {
+      console.log('📄 Page changed - fetching users');
+      fetchUsers(page, searchQuery, statusFilter);
+    }
+  }, [page, rowsPerPage]); // Page and rowsPerPage changes
+
+  // Effect for search/filter changes (debounced)
+  useEffect(() => {
+    if (!isInitialMount.current) {
+      // Clear any existing timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
       }
-    }, 500);
 
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery, statusFilter]);
+      // Debounce search/filter changes
+      searchTimeoutRef.current = window.setTimeout(() => {
+        console.log('🔍 Search/filter changed - fetching users after debounce');
+        // Reset to page 0 when searching/filtering
+        if (page !== 0) {
+          setPage(0); // This will trigger the page effect
+        } else {
+          fetchUsers(0, searchQuery, statusFilter);
+        }
+      }, 500);
+
+      // Cleanup function
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+          searchTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [searchQuery, statusFilter]); // Only search and filter changes
 
   // Handle page change
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -284,7 +316,7 @@ export default function UsersPage() {
   // Handle edit user
   const handleEditUser = async (user: User) => {
     try {
-      const userWithPrefs = await apiClient.get<UserWithPreferences>(`/users/${user.id}`);
+      const userWithPrefs = await usersApi.getUser(user.id);
       setSelectedUser(userWithPrefs);
       editForm.reset({
         email: userWithPrefs.email,
@@ -302,7 +334,7 @@ export default function UsersPage() {
   // Handle view user
   const handleViewUser = async (user: User) => {
     try {
-      const userWithPrefs = await apiClient.get<UserWithPreferences>(`/users/${user.id}`);
+      const userWithPrefs = await usersApi.getUser(user.id);
       setSelectedUser(userWithPrefs);
       setViewUserOpen(true);
     } catch (err: any) {
@@ -332,10 +364,21 @@ export default function UsersPage() {
     setSuccess(null);
     
     try {
-      await apiClient.post('/users/', data);
+      // Type assertion to ensure required fields are present (form validation guarantees this)
+      const userData = {
+        email: data.email!,
+        password: data.password!,
+        is_admin: data.is_admin,
+        is_active: data.is_active,
+        openai_api_key: data.openai_api_key,
+        default_model: data.default_model,
+        suggestion_count: data.suggestion_count,
+      };
+      
+      await usersApi.createUser(userData);
       setSuccess('User created successfully. An email has been sent to the user for account setup.');
       setDialogOpen(false);
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to create user');
@@ -349,10 +392,10 @@ export default function UsersPage() {
     setSuccess(null);
     
     try {
-      await apiClient.patch(`/users/${selectedUser.id}`, data);
+      await usersApi.updateUser(selectedUser.id, data);
       setSuccess('User updated successfully');
       setEditDialogOpen(false);
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to update user');
@@ -366,7 +409,12 @@ export default function UsersPage() {
     setSuccess(null);
     
     try {
-      await apiClient.post(`/users/${selectedUser.id}/reset-password`, data);
+      // Type assertion to ensure required field is present (form validation guarantees this)
+      const passwordData = {
+        new_password: data.new_password!,
+      };
+      
+      await usersApi.resetPassword(selectedUser.id, passwordData);
       setSuccess('Password reset successfully');
       setResetPasswordDialogOpen(false);
     } catch (err: any) {
@@ -379,11 +427,11 @@ export default function UsersPage() {
     if (!selectedUser) return;
     
     try {
-      await apiClient.delete(`/users/${selectedUser.id}`);
+      await usersApi.deleteUser(selectedUser.id);
       setSuccess('User deleted successfully');
       setDeleteDialogOpen(false);
       setSelectedUser(null);
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to delete user');
@@ -394,13 +442,13 @@ export default function UsersPage() {
   const handleStatusToggle = async (user: User) => {
     try {
       if (user.is_active) {
-        await apiClient.post(`/users/${user.id}/deactivate`);
+        await usersApi.deactivateUser(user.id);
         setSuccess(`User deactivated successfully`);
       } else {
-        await apiClient.post(`/users/${user.id}/activate`);
+        await usersApi.activateUser(user.id);
         setSuccess(`User activated successfully`);
       }
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to update user status');
@@ -411,13 +459,13 @@ export default function UsersPage() {
   const handleAdminToggle = async (user: User) => {
     try {
       if (user.is_admin) {
-        await apiClient.post(`/users/${user.id}/remove-admin`);
+        await usersApi.removeAdmin(user.id);
         setSuccess(`Admin privileges removed successfully`);
       } else {
-        await apiClient.post(`/users/${user.id}/make-admin`);
+        await usersApi.makeAdmin(user.id);
         setSuccess(`Admin privileges granted successfully`);
       }
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to update user role');
@@ -429,10 +477,10 @@ export default function UsersPage() {
     if (bulkSelection.length === 0) return;
     
     try {
-      await apiClient.post('/users/bulk-activate', bulkSelection);
+      await usersApi.bulkActivateUsers(bulkSelection);
       setSuccess(`Successfully activated ${bulkSelection.length} users`);
       setBulkSelection([]);
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to activate users');
@@ -443,10 +491,10 @@ export default function UsersPage() {
     if (bulkSelection.length === 0) return;
     
     try {
-      await apiClient.post('/users/bulk-deactivate', bulkSelection);
+      await usersApi.bulkDeactivateUsers(bulkSelection);
       setSuccess(`Successfully deactivated ${bulkSelection.length} users`);
       setBulkSelection([]);
-      await fetchUsers();
+      await fetchUsers(page, searchQuery, statusFilter);
       await fetchUserStats();
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || 'Failed to deactivate users');
@@ -456,10 +504,7 @@ export default function UsersPage() {
   // Export users
   const handleExportUsers = async () => {
     try {
-      // In a real implementation, this would download a CSV file
-      const allUsers = await apiClient.get<UsersResponse>('/users/', { 
-        params: { limit: 10000 } // Get all users
-      });
+      const allUsers = await usersApi.getUsers({ limit: 10000 }); // Get all users
       
       const csvContent = [
         'ID,Email,Status,Role,Verified,Created,Updated',
@@ -484,6 +529,11 @@ export default function UsersPage() {
     }
   };
 
+  // Handle stats refresh
+  const handleRefreshStats = async () => {
+    await fetchUserStats();
+  };
+
   // Utility functions
   const formatDate = (dateString: string) => {
     try {
@@ -501,7 +551,7 @@ export default function UsersPage() {
     const maskedPart = '•'.repeat(10);
     return `${prefix}...${maskedPart}...${suffix}`;
   };
-
+  // JSX Return - Part 2 of the UsersPage component
   return (
     <Box>
       {/* Success/Error Messages */}
@@ -517,7 +567,21 @@ export default function UsersPage() {
       </Snackbar>
       
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }} 
+          onClose={() => setError(null)}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => fetchUsers(page, searchQuery, statusFilter)}
+              disabled={loading}
+            >
+              Retry
+            </Button>
+          }
+        >
           {error}
         </Alert>
       )}
@@ -548,6 +612,15 @@ export default function UsersPage() {
             Export
           </Button>
           <Button
+            variant="outlined"
+            startIcon={statsLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
+            onClick={handleRefreshStats}
+            disabled={statsLoading}
+            sx={{ minWidth: 120 }}
+          >
+            {statsLoading ? 'Loading...' : 'Refresh Stats'}
+          </Button>
+          <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={handleCreateUser}
@@ -563,7 +636,7 @@ export default function UsersPage() {
           <Card sx={{ textAlign: 'center' }}>
             <CardContent>
               <Typography variant="h4" color="primary.main" fontWeight="bold">
-                {userStats.total_users}
+                {statsLoading ? <CircularProgress size={32} /> : userStats.total_users}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Total Users
@@ -576,7 +649,7 @@ export default function UsersPage() {
           <Card sx={{ textAlign: 'center' }}>
             <CardContent>
               <Typography variant="h4" color="success.main" fontWeight="bold">
-                {userStats.active_users}
+                {statsLoading ? <CircularProgress size={32} /> : userStats.active_users}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Active Users
@@ -589,7 +662,7 @@ export default function UsersPage() {
           <Card sx={{ textAlign: 'center' }}>
             <CardContent>
               <Typography variant="h4" color="warning.main" fontWeight="bold">
-                {userStats.inactive_users}
+                {statsLoading ? <CircularProgress size={32} /> : userStats.inactive_users}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Inactive Users
@@ -602,7 +675,7 @@ export default function UsersPage() {
           <Card sx={{ textAlign: 'center' }}>
             <CardContent>
               <Typography variant="h4" color="secondary.main" fontWeight="bold">
-                {userStats.admin_users}
+                {statsLoading ? <CircularProgress size={32} /> : userStats.admin_users}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Admin Users
@@ -615,7 +688,7 @@ export default function UsersPage() {
           <Card sx={{ textAlign: 'center' }}>
             <CardContent>
               <Typography variant="h4" color="info.main" fontWeight="bold">
-                {userStats.verified_users}
+                {statsLoading ? <CircularProgress size={32} /> : userStats.verified_users}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Verified Users
@@ -628,7 +701,7 @@ export default function UsersPage() {
           <Card sx={{ textAlign: 'center' }}>
             <CardContent>
               <Typography variant="h4" color="error.main" fontWeight="bold">
-                {userStats.unverified_users}
+                {statsLoading ? <CircularProgress size={32} /> : userStats.unverified_users}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Unverified Users
@@ -768,7 +841,6 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell align="center">
                         <Chip 
-                          label={user.is_admin ? "Admin" : "User"} 
                           color={user.is_admin ? "primary" : "default"}
                           size="small"
                           icon={user.is_admin ? <AdminPanelSettingsIcon /> : <PersonIcon />}
